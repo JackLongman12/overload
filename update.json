@@ -1,4 +1,4 @@
 {
-  "payload": "{\"version\":\"1.2.0\",\"bundle\":\"https://github.com/JackLongman12/overload/releases/download/v1.2.0/bundle-1.2.0.zip\",\"checksum\":\"83c53c770a9a3f2e0108eeae35f2b1f7840bac82c73e6b36144a2da4ce3423eb\",\"notes\":\"Renamed to Gym App.\",\"apkVersionCode\":3,\"apk\":\"https://github.com/JackLongman12/overload/releases/download/apk-1.2.0/gym-app-1.2.0.apk\",\"apkSha256\":\"5f9abca59db9c9cb3f38fb16817ba1c92704d57144a08450208014aee566b9b7\",\"published\":\"2026-11-26T06:32:29.673Z\"}",
-  "sig": "TpUXRKjVs9Y/qplurZaVreruTWyW5UR27/lWBHN0PcGxPp9j5aa83Hv8q4JgG69MMlHU+oCMRtJp4cbNz7ztXQ=="
+  "payload": "{\"version\":\"1.3.0\",\"bundle\":\"https://github.com/JackLongman12/overload/releases/download/v1.3.0/bundle-1.3.0.zip\",\"checksum\":\"558c8a4c684042ac8595bf9bf437e5fe7043ce0b5353317ed8bb9fa07e65a094\",\"notes\":\"21 preset programs with filters, routines grouped by program, optional end-to-end encrypted account sync with cloud backups.\",\"apkVersionCode\":3,\"apk\":\"https://github.com/JackLongman12/overload/releases/download/apk-1.2.0/gym-app-1.2.0.apk\",\"apkSha256\":\"5f9abca59db9c9cb3f38fb16817ba1c92704d57144a08450208014aee566b9b7\",\"published\":\"2026-11-26T06:41:28.490Z\"}",
+  "sig": "8MZ1ORkxs7vfDUyCBfF78JjfUUXvMLNNPvGuMaQCNz81JCJILqQcF1RzT93OecRHVhwzBGrKesW1CErlnr6Izw=="
 }
