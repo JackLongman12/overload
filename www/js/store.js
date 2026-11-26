@@ -51,6 +51,7 @@ const Store = {
       try { localStorage.setItem(DB_KEY, s); } catch (e) { toast('Storage full. Export a backup.'); }
       this.writeFile(s);
       if (typeof Sync !== 'undefined') Sync.schedule();
+      if (typeof Companion !== 'undefined') Companion.schedule();
     };
     if (now) go(); else this._t = setTimeout(go, 300);
   },

@@ -146,6 +146,12 @@ Object.assign(UI, {
         <details class="sm muted"><summary>Which watches work?</summary>
           <p><b>Samsung Galaxy Watch:</b> Samsung Health, Settings, Health Connect, then allow sharing.<br><b>Pixel Watch and Fitbit:</b> the Fitbit app syncs to Health Connect.<br><b>Xiaomi and Redmi:</b> Mi Fitness, Profile, Health Connect.<br><b>Amazfit:</b> Zepp app, Profile, Add accounts, Health Connect.<br><b>Garmin:</b> Garmin Connect, Settings, Health Connect.<br><b>Honor and Huawei:</b> depends on model and region. If your watch can broadcast heart rate, use the heart-rate section below.<br><b>Apple Watch:</b> not possible. It only pairs with iPhone.</p></details>
       </div>
+      <div class="section-head"><h3>${icon('device-watch')} Wear OS app</h3><span class="sm muted">on your watch</span></div>
+      <div class="card"><p class="sm">Gym App for Wear OS (Galaxy Watch 4 and newer, Pixel Watch, and others) shows the current set and target on your wrist, counts down rest, and lets you complete sets, add 30 s or skip rest without touching your phone.</p>
+        <p class="sm muted">Install it with the watch APK from the GitHub releases page. Your watch must be paired with this phone. See the README for the steps.</p>
+        <button class="btn sm wide" data-a="watchCheck">${icon('refresh')} Check watch connection</button>${this.watchMsg ? `<div class="sm muted center">${esc(this.watchMsg)}</div>` : ''}</div>
+      <div class="section-head"><h3>${icon('layout-dashboard')} Home-screen widget</h3></div>
+      <div class="card sm">Long-press your home screen, tap Widgets, and add <b>Gym App</b>. It shows your next workout, this week's progress, your streak and readiness.</div>
       <div class="section-head"><h3>${icon('scale')} Smart scale</h3><span class="sm muted">Bluetooth</span></div>
       <div class="card">
         ${!sc ? `<p class="sm">Works with Xiaomi Mi Smart Scale and Mi Body Composition Scale (1 and 2). Tap the button, then step on the scale barefoot.</p><button class="btn primary wide" data-a="scaleScan">${icon('scale')} Weigh in</button>` : ''}

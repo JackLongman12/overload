@@ -202,3 +202,57 @@ const BLE = {
   // Reconnect the remembered strap when a workout starts
   async autoHR() { const id = Store.data.settings.hrDeviceId; if (id && !this.hrDevice && Cap()) { try { await this.connectHR(id); } catch (e) { } } }
 };
+
+// ---------- Home-screen widget and Wear OS companion (native code in android/)
+const Companion = {
+  _t: null, _last: '',
+  schedule() { clearTimeout(this._t); this._t = setTimeout(() => this.push(), 700); },
+  // The set the user should do next: first unfinished working set
+  current(a) {
+    for (const e of a.exercises) {
+      const ex = Store.ex(e.exId), work = e.sets.filter(s => s.type !== 'W');
+      const i = e.sets.findIndex(s => !s.done);
+      if (i < 0) continue;
+      const s = e.sets[i], p = s.p || {}, n = s.type === 'W' ? 'Warm-up' : `Set ${work.indexOf(s) + 1} of ${work.length}`;
+      const val = k => (s[k] !== '' && s[k] != null ? s[k] : p[k]);
+      const target = ex.type === 'dist' ? `${val('d') || '?'} km` : ex.type === 'dur' ? `${val('t') || '?'} s` : ex.type === 'bw' ? `${val('r') || '?'} reps` : `${fmtW(val('w')) || '?'} ${U()} × ${val('r') || '?'}`;
+      return { ei: a.exercises.indexOf(e), si: i, name: ex.name, set: n, target };
+    }
+    return null;
+  },
+  push() {
+    const d = Store.data, a = d.active;
+    const groups = d.routines.length ? routineGroups(d) : [];
+    const next = groups.map(g => g.routines.find(r => r.id === g.next)).filter(Boolean)[0];
+    const ci = Store.latestCheckin();
+    // Widget
+    const w = Plugin('WidgetBridge');
+    if (w) {
+      const json = JSON.stringify({ active: !!a, next: a ? a.name : (next ? next.name : 'Start an empty workout'), week: d.workouts.filter(x => x.start > startOfWeek()).length, goal: d.settings.weekGoal, streak: weekStreak(), readiness: ci ? String(ci.score) : '' });
+      if (json !== this._lastW) { this._lastW = json; w.update({ json }).catch(() => { }); }
+    }
+    // Watch
+    const wb = Plugin('WearBridge');
+    if (wb) {
+      const cur = a ? this.current(a) : null;
+      const sug = cur ? Coach.suggest(a.exercises[cur.ei].exId, a.exercises[cur.ei].target) : null;
+      const state = a ? { active: true, name: a.name, ex: cur ? { name: cur.name, set: cur.set, target: cur.target } : null, restEnd: UI.restEnd || 0, hr: BLE.hr || 0, coach: sug ? sug.title : '' } : { active: false, next: next ? next.name : '' };
+      const json = JSON.stringify(state);
+      if (json !== this._last) { this._last = json; wb.sendState({ json }).catch(() => { }); }
+    }
+  },
+  init() {
+    const wb = Plugin('WearBridge');
+    if (wb) wb.addListener('wearAction', ev => {
+      const a = Store.data.active; if (!a) return;
+      if (ev.action === 'complete') {
+        const cur = this.current(a); if (!cur) return;
+        Actions.toggleSet.call(UI, null, { i: cur.ei, j: cur.si });
+      } else if (ev.action === 'add30') Actions.restAdj.call(UI, null, { v: 30 });
+      else if (ev.action === 'skip') UI.stopRest();
+      UI.render(); this.push();
+    });
+    this.push();
+  },
+  async watchStatus() { const wb = Plugin('WearBridge'); if (!wb) return null; try { return await wb.connected(); } catch (e) { return null; } }
+};

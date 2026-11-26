@@ -263,6 +263,7 @@ const Actions = {
   errorShare() { download(`gym-app-errors-${new Date().toISOString().slice(0, 10)}.txt`, ErrorLog.text()); },
   errorClear() { ErrorLog.clear(); this.refreshSheet(); },
 
+  async watchCheck() { const r = await Companion.watchStatus(); this.watchMsg = !r ? 'Only available in the Android app' : r.count ? `Connected to ${r.name || 'your watch'}` : 'No watch connected'; this.refreshSheet(); },
   // ----- Devices
   devices() { this.openDevices(); },
   async hcConnect() { try { await HC.connect(); toast(HC.on ? 'Health Connect linked' : 'No permissions granted'); } catch (e) { toast(e.message); } this.refreshSheet(); },

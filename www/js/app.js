@@ -13,6 +13,7 @@ const UI = {
     applyLook();
     this.bind();
     if (HC.on) HC.pull().then(() => { if (!this.stack.length) this.render(); });
+    Companion.init();
     this.render();
     setInterval(() => this.tick(), 1000);
     Updater.init();
@@ -317,9 +318,10 @@ const UI = {
     if (!sec) return;
     this.restTotal = sec; this.restEnd = Date.now() + sec * 1000; this._restBeeped = false;
     Notify.ensure().then(ok => { if (ok) { Notify.at(REST_NOTIF, this.restEnd, 'Rest over', 'Time for your next set'); RestNotif.show(); } });
+    Companion.schedule();
     this.refreshSheet();
   },
-  stopRest() { this.restEnd = 0; Notify.cancel(REST_NOTIF); RestNotif.hide(); this.refreshSheet(); },
+  stopRest() { this.restEnd = 0; Notify.cancel(REST_NOTIF); RestNotif.hide(); Companion.schedule(); this.refreshSheet(); },
 
   tick() {
     const a = Store.data.active;

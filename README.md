@@ -57,6 +57,24 @@ npx wrangler deploy
 - **Heart-rate straps and watches** that broadcast heart rate (standard BLE 0x180D): live bpm during workouts, and average and max are saved.
 - Apple Watch isn't supported because it only pairs with iPhone.
 
+## Wear OS watch app
+`gym-app-<version>-wear.apk` (on the Releases page) runs on Wear OS 3+ watches, such as Galaxy Watch 4 or newer and Pixel Watch. It shows the current exercise, set and target, counts down rest, and lets you complete sets, add 30 s or skip rest from your wrist. It talks to the phone app through the Wearable Data Layer, so the watch must be paired with the phone and both apps must come from this repo (same signing key).
+
+To sideload it:
+1. On the watch, open Settings > About watch > Software, and tap **Software version** 7 times to enable developer options.
+2. Go to Settings > Developer options. Turn on **ADB debugging** and **Wireless debugging**, and note the IP address and port.
+3. On a computer with Android platform-tools, run:
+   ```
+   adb connect <ip>:<port>
+   adb install gym-app-<version>-wear.apk
+   ```
+   Galaxy Watch may ask you to pair with a code first: run `adb pair <ip>:<pair-port>`.
+
+Code is in `android/wear/` (watch) and `WearBridgePlugin.java` (phone side).
+
+## Home-screen widget
+Long-press the home screen, tap Widgets, then add Gym App. It shows your next workout, this week's progress, streak and readiness. Code is in `GymWidget.java`.
+
 ## AI rep counter (on-device)
 MediaPipe Pose Landmarker runs on the phone (`www/js/pose.js`). It counts reps from joint angles and gives form cues for squat depth and push-up hip line. The roughly 20 MB AI pack is downloaded on first use and SHA-256-checked against hashes in the signed app. It isn't in the update bundle, so over-the-air updates stay small.
 

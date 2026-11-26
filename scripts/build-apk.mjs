@@ -12,12 +12,24 @@ const gradle = 'android/app/build.gradle';
 let g = fs.readFileSync(gradle, 'utf8');
 g = g.replace(/versionCode \d+/, `versionCode ${cfg.apkVersionCode}`).replace(/versionName "[^"]*"/, `versionName "${cfg.apkVersionName}"`);
 fs.writeFileSync(gradle, g);
+// Watch app: separate versionCode range so it never collides with the phone app
+const wearGradle = 'android/wear/build.gradle';
+if (fs.existsSync(wearGradle)) {
+  let wg = fs.readFileSync(wearGradle, 'utf8');
+  wg = wg.replace(/versionCode \d+/, `versionCode ${100000 + cfg.apkVersionCode}`).replace(/versionName "[^"]*"/, `versionName "${cfg.apkVersionName}"`);
+  fs.writeFileSync(wearGradle, wg);
+}
 const run = (cmd, cwd = '.') => { console.log('> ' + cmd); execSync(cmd, { stdio: 'inherit', env, cwd }); };
 run('npx cap sync android');
 const gw = process.platform === 'win32' ? `"${path.resolve('android/gradlew.bat')}"` : './gradlew';
-run(`${gw} assembleRelease bundleRelease`, 'android');
+run(`${gw} :app:assembleRelease :app:bundleRelease :wear:assembleRelease`, 'android');
 fs.mkdirSync('dist', { recursive: true });
 const base = `dist/gym-app-${cfg.apkVersionName}`;
 fs.copyFileSync('android/app/build/outputs/apk/release/app-release.apk', base + '.apk');
 fs.copyFileSync('android/app/build/outputs/bundle/release/app-release.aab', base + '.aab');
-console.log('\nReady:\n  ' + path.resolve(base + '.apk') + '  (install on phones)\n  ' + path.resolve(base + '.aab') + '  (upload to Google Play)');
+const wearApk = 'android/wear/build/outputs/apk/release/wear-release.apk';
+if (fs.existsSync(wearApk)) fs.copyFileSync(wearApk, base + '-wear.apk');
+console.log(['', 'Ready:',
+  '  ' + path.resolve(base + '.apk') + '  (install on phones)',
+  '  ' + path.resolve(base + '.aab') + '  (upload to Google Play)',
+  '  ' + path.resolve(base + '-wear.apk') + '  (install on a Wear OS watch)'].join('\n'));
