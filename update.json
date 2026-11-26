@@ -1,4 +1,4 @@
 {
-  "payload": "{\"version\":\"1.1.0\",\"bundle\":\"https://github.com/JackLongman12/overload/releases/download/v1.1.0/bundle-1.1.0.zip\",\"checksum\":\"7fa6169f33159d12cabea598d5075b072e661d7b9b8b4e23561b515e7a5d41fd\",\"notes\":\"Release-signed build, signed and verified updates, photos stored as files, backup reminders, welcome screen with health disclaimer, privacy policy.\",\"apkVersionCode\":2,\"apk\":\"https://github.com/JackLongman12/overload/releases/download/apk-1.1.0/overload-1.1.0.apk\",\"apkSha256\":\"3d0565801918467ac24126df25993e73c609dbdee00dd2f6e9a56b0a7e083e46\",\"published\":\"2026-11-26T06:26:27.263Z\"}",
-  "sig": "BsZ8RriCnsd0uTy/HfmnbVqulJ/6VVUBSsHw64Vq+wBDjPWfQCByZW8e2+INvqDSrQQ32lmTp7/EP7q9QQ96mA=="
+  "payload": "{\"version\":\"1.2.0\",\"bundle\":\"https://github.com/JackLongman12/overload/releases/download/v1.2.0/bundle-1.2.0.zip\",\"checksum\":\"83c53c770a9a3f2e0108eeae35f2b1f7840bac82c73e6b36144a2da4ce3423eb\",\"notes\":\"Renamed to Gym App.\",\"apkVersionCode\":3,\"apk\":\"https://github.com/JackLongman12/overload/releases/download/apk-1.2.0/gym-app-1.2.0.apk\",\"apkSha256\":\"5f9abca59db9c9cb3f38fb16817ba1c92704d57144a08450208014aee566b9b7\",\"published\":\"2026-11-26T06:32:29.673Z\"}",
+  "sig": "TpUXRKjVs9Y/qplurZaVreruTWyW5UR27/lWBHN0PcGxPp9j5aa83Hv8q4JgG69MMlHU+oCMRtJp4cbNz7ztXQ=="
 }
