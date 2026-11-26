@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "bundle": "https://github.com/JackLongman12/overload/releases/download/v1.0.0/bundle-1.0.0.zip",
+  "notes": "First release",
+  "apkVersionCode": 1,
+  "apk": "https://github.com/JackLongman12/overload/releases/download/apk-1.0.0/overload-1.0.0.apk"
+}
