@@ -1,6 +1,7 @@
 {
   "repo": "JackLongman12/overload",
-  "apkVersionCode": 7,
-  "apkVersionName": "2.0.0",
-  "notes": "Climbing coach: hangboard edge and grip tracking with protocols and a built-in hang timer, high points for unsent climbs, workload and injury-risk warnings, strength profile vs grade, 16-week climbing plans. New muscle map and better recovery estimates. Sign in with an account key, no email or password. One-tap check-in. Category pages, program pages and no sideways scrolling. Calisthenics 1RM, bodyweight-to-barbell estimates, strength levels and an RPE chart."
+  "apkVersionCode": 8,
+  "apkVersionName": "2.1.0",
+  "notes": "Automatic updates: new versions download in the background and install themselves when you leave the app (never during a workout). On Android 12+ this is silent after you allow it once. Install this version once by hand to turn it on.",
+  "bundleMinApk": 5
 }

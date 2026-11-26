@@ -51,10 +51,12 @@ const UI = {
     if (a && !showing) {
       el.innerHTML = `<button class="banner" data-a="openWorkout">${icon('barbell')}<span><b>${esc(a.name)}</b> in progress · <span class="wtime">${fmtDur((Date.now() - a.start) / 1000)}</span></span>${icon('chevron-up')}</button>`;
     } else el.innerHTML = '';
-    const u = Updater.state;
+    const u = Updater.state, ap = Updater.apkState;
     const ub = $('#updbar');
-    if (u === 'ready') ub.innerHTML = `<div class="updbar">${icon('download')} Update ${esc(Updater.info.version)} is ready <button class="btn sm primary" data-a="applyUpdate">Restart</button></div>`;
-    else if (u === 'apk') ub.innerHTML = `<div class="updbar">${icon('brand-android')} A new app version is available <button class="btn sm primary" data-a="openApk">Download</button></div>`;
+    // Updates install by themselves; only show a bar when one tap is needed
+    if (ap === 'permission') ub.innerHTML = `<div class="updbar">${icon('shield-check')} Allow automatic updates (one time) <button class="btn sm primary" data-a="allowUpdates">Allow</button></div>`;
+    else if (ap === 'tap' || (ap === 'ready' && Updater.apkStatus && !Updater.apkStatus.silent)) ub.innerHTML = `<div class="updbar">${icon('download')} Update ready <button class="btn sm primary" data-a="installUpdate">Install</button></div>`;
+    else if (ap === 'manual' && u === 'apk') ub.innerHTML = `<div class="updbar">${icon('brand-android')} Install this update once to turn on automatic updates <button class="btn sm primary" data-a="openApk">Download</button></div>`;
     else if (u === 'web') ub.innerHTML = `<div class="updbar">${icon('refresh')} New version ${esc(Updater.info.version)} <button class="btn sm primary" data-a="applyUpdate">Reload</button></div>`;
     else ub.innerHTML = '';
   },

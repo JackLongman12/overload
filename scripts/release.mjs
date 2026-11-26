@@ -33,7 +33,7 @@ if (withApk) {
 // 3) Signed feed. The app verifies `sig` with the public key in www/js/updatekey.js,
 //    and the updater plugin verifies the zip against `checksum` (SHA-256).
 const sha256 = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-const feed = { version, bundle: dl(tag, zipName), checksum: sha256('dist/' + zipName), notes: cfg.notes,
+const feed = { version, bundle: dl(tag, zipName), checksum: sha256('dist/' + zipName), notes: cfg.notes, minApk: cfg.bundleMinApk || 0,
   apkVersionCode: cfg.apkVersionCode, apk: dl(apkTag, apkName), apkSha256: fs.existsSync('dist/' + apkName) ? sha256('dist/' + apkName) : '', published: new Date().toISOString() };
 const payload = JSON.stringify(feed);
 const sig = crypto.sign('sha256', Buffer.from(payload), { key: fs.readFileSync('keys/update-private.pem'), dsaEncoding: 'ieee-p1363' }).toString('base64');

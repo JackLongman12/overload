@@ -5,6 +5,8 @@ const Actions = {
   openWorkout() { this.openWorkout(); },
   applyUpdate() { Updater.applyNow(); },
   openApk() { Updater.openApk(); },
+  allowUpdates() { Updater.installApk(true); },
+  installUpdate() { Updater.installApk(true); },
   moreHistory() { this._histN = (this._histN || 15) + 30; this.render(); },
 
   // ----- Starting workouts

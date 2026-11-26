@@ -661,15 +661,18 @@ Object.assign(UI, {
   openUpdates() {
     const s = Store.data.settings;
     this.openSheet('settings', 'App updates', () => {
-      const st = { idle: 'Not checked yet', checking: 'Checking…', current: 'You\'re up to date', downloading: 'Downloading update…', ready: `Update ${Updater.info && Updater.info.version} downloaded. It applies on next launch.`, apk: 'A new APK is available', web: 'A new version is available', error: 'Check failed: ' + (Updater.err || '') }[Updater.state];
+      const st = { idle: 'Not checked yet', checking: 'Checking…', current: 'You\'re up to date', downloading: 'Downloading update…', ready: `Update ${Updater.info && Updater.info.version} downloaded. It switches over when you next leave the app.`, apk: 'A new app version is available', web: 'A new version is available', error: 'Check failed: ' + (Updater.err || '') }[Updater.state];
+      const apk = { downloading: 'Downloading the new app version in the background…', ready: Updater.apkStatus && Updater.apkStatus.silent ? 'New app version downloaded. It installs by itself when you leave the app (not during a workout).' : 'New app version downloaded. Tap Install.', permission: 'Needs a one-time permission to install its own updates.', installing: 'Installing…', tap: 'Tap Install to finish the update.', manual: 'This version can\'t install updates by itself. Install the new APK once and future updates are automatic.', error: 'App update failed: ' + (Updater.err || ''), done: 'Installed. Gym App restarts with the new version.' }[Updater.apkState];
       return `<div class="card"><div class="li static"><span>App content version</span><b>${esc(Updater.bundleVersion)}</b></div><div class="li static"><span>Android app version</span><b>${esc(Updater.nativeVersion || 'browser')}${Updater.nativeBuild ? ' (build ' + Updater.nativeBuild + ')' : ''}</b></div>
-        <div class="li static"><span>Status</span><span class="sm">${esc(st)}</span></div></div>
+        <div class="li static"><span>Status</span><span class="sm">${esc(st)}</span></div>${apk ? `<div class="li static"><span>App update</span><span class="sm">${esc(apk)}</span></div>` : ''}</div>
       <label class="field">Update feed URL (update.json)<input data-setting="updateUrl" value="${esc(s.updateUrl)}" placeholder="https://raw.githubusercontent.com/you/overload/main/dist/update.json"></label>
-      <label class="field row"><input type="checkbox" data-setting="autoUpdate" ${s.autoUpdate ? 'checked' : ''}> Check for updates automatically at startup</label>
+      <label class="field row"><input type="checkbox" data-setting="autoUpdate" ${s.autoUpdate !== false ? 'checked' : ''}> Update automatically (downloads in the background and installs when you leave the app, never during a workout)</label>
       <button class="btn primary wide" data-a="checkUpdate">${icon('refresh')} Check now</button>
       ${Updater.state === 'ready' ? `<button class="btn wide" data-a="applyUpdate">${icon('player-play')} Restart and apply now</button>` : ''}
-      ${Updater.state === 'apk' ? `<button class="btn wide" data-a="openApk">${icon('download')} Download new APK</button>` : ''}
-      <p class="sm muted">Content updates (features, coach logic, fixes) download quietly and install on the next launch, with no reinstall. Changes to the Android side itself need a new APK, and the app will offer to download it.</p>`;
+      ${Updater.apkState === 'permission' ? `<button class="btn primary wide" data-a="allowUpdates">${icon('shield-check')} Allow automatic updates</button>` : ''}
+      ${['ready', 'tap'].includes(Updater.apkState) ? `<button class="btn wide" data-a="installUpdate">${icon('download')} Install app update now</button>` : ''}
+      ${Updater.apkState === 'manual' ? `<button class="btn wide" data-a="openApk">${icon('download')} Download new APK</button>` : ''}
+      <p class="sm muted">Updates are automatic. New features and fixes switch over quietly when you leave the app. New app versions download in the background and install themselves too: on Android 12 and newer this happens silently after you allow it once. Android always checks that an update is signed by the same developer key.</p>`;
     });
   },
 

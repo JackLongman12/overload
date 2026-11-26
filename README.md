@@ -27,13 +27,14 @@ The app reads `update.json` from this repo (https://raw.githubusercontent.com/Ja
 - **Content updates** (features, coach logic, fixes; anything in `www/`): no reinstall needed.
   1. Bump `version` in `www/version.json` (for example 1.0.0 to 1.0.1).
   2. Run `node scripts/release.mjs`. It zips `www/`, uploads it to a GitHub Release, and commits and pushes `update.json`.
-  3. Phones download the update in the background at startup and apply it on the next launch.
+  3. Phones download the update in the background and switch to it the next time the user leaves the app (or on the next launch). Never during a workout or a running timer.
 - **Native updates** (new plugins, Android changes): bump `apkVersionCode` and `apkVersionName` in `release.config.json`, then run:
   ```
   node scripts/build-apk.mjs
   node scripts/release.mjs --apk
   ```
-  The app shows a "new app version, Download" banner.
+  Phones on 2.1.0 or newer download the APK in the background, check its SHA-256 against the signed feed, and install it themselves when the user leaves the app (`AppUpdatePlugin.java`, Android PackageInstaller). On Android 12+ this is silent once the user has allowed "Install unknown apps" for Gym App (the app asks once). Android also refuses any APK not signed with the same release key.
+- `bundleMinApk` in `release.config.json` is the oldest APK build that can run the current `www/`. Raise it when web code starts depending on a new native plugin; phones on older APKs then wait for the APK update instead of getting the bundle.
 
 The latest APK is always at https://github.com/JackLongman12/overload/releases.
 
