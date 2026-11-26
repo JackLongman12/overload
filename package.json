@@ -1,0 +1,29 @@
+{
+  "name": "overload-gym",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Overload: free gym tracker with a progressive overload coach",
+  "scripts": {
+    "serve": "node scripts/serve.mjs",
+    "sync": "npx cap sync android",
+    "apk": "node scripts/build-apk.mjs",
+    "release": "node scripts/release.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/share": "^8.0.3",
+    "@capgo/capacitor-updater": "^8.54.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.3",
+    "@tabler/icons-webfont": "^3.53.0",
+    "adm-zip": "^0.6.1"
+  }
+}

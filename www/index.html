@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0f1115">
+  <title>Overload</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/tabler-icons.min.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="updbar"></div>
+  <main id="view"></main>
+  <div id="banner"></div>
+  <nav id="nav">
+    <button data-tab="home"><i class="ti ti-home" aria-hidden="true"></i><span>Home</span></button>
+    <button data-tab="train"><i class="ti ti-barbell" aria-hidden="true"></i><span>Train</span></button>
+    <button data-tab="progress"><i class="ti ti-chart-line" aria-hidden="true"></i><span>Progress</span></button>
+    <button data-tab="you"><i class="ti ti-user" aria-hidden="true"></i><span>You</span></button>
+  </nav>
+  <div id="sheets"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="js/util.js"></script>
+  <script src="js/exercises.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/coach.js"></script>
+  <script src="js/importers.js"></script>
+  <script src="js/updater.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/actions.js"></script>
+  <script src="js/views.js"></script>
+</body>
+</html>

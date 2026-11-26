@@ -1,0 +1,10 @@
+{
+  "appId": "com.overload.gym",
+  "appName": "Overload",
+  "webDir": "www",
+  "android": { "backgroundColor": "#0f1115" },
+  "plugins": {
+    "CapacitorUpdater": { "autoUpdate": false, "resetWhenUpdate": true, "statsUrl": "", "channelUrl": "", "updateUrl": "" },
+    "LocalNotifications": { "iconColor": "#3d8bfd" }
+  }
+}
