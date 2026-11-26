@@ -268,6 +268,7 @@ Object.assign(UI, {
     this.openSheet('exdetail', esc(ex.name), () => `
       <div class="chips"><span class="chip">${MUSCLES[ex.muscle] || ex.muscle}</span>${(ex.secondary || []).map(m => `<span class="chip ghost">${MUSCLES[m] || m}</span>`).join('')}<span class="chip ghost">${ex.equipment}</span>${ladder ? `<span class="chip ghost">${icon('stairs-up')} ${esc(ladder.name)}</span>` : ''}</div>
       <div class="coach ${sug.kind}"><div class="coach-head">${icon('sparkles')}<b>${esc(sug.title)}</b></div><div class="sm">${esc(sug.text)}</div></div>
+      <div class="card center">${BodyMap.svg({}, 'sets', { primary: ex.muscle, secondary: ex.secondary })}<div class="bm-legend sm muted"><span class="bm-3">■</span> Main <span class="bm-1">■</span> Also works</div></div>
       <button class="btn wide" data-a="watchDemo" data-id="${id}">${icon('brand-youtube')} Watch how to do it</button>
       ${(ex.type === 'wr' || ex.type === 'wbw') && hist.length ? `<div class="stats3"><div class="stat"><div class="muted sm">Heaviest</div><b>${fmtW(b.w)}</b></div><div class="stat"><div class="muted sm">Best e1RM</div><b>${Math.round(b.e1)}</b></div><div class="stat"><div class="muted sm">Best set vol.</div><b>${fmtNum(b.vol)}</b></div></div>` : ''}
       ${charts}
@@ -285,6 +286,7 @@ Object.assign(UI, {
       ${w.notes ? `<div class="card sm">${esc(w.notes)}</div>` : ''}
       ${w.exercises.map(e => { const ex = Store.ex(e.exId); let n = 0; return `<div class="card"><button class="ex-title" data-a="exDetail" data-id="${e.exId}">${esc(ex.name)}</button>${e.notes ? `<div class="sm muted">${esc(e.notes)}</div>` : ''}
         ${e.sets.map(s => `<div class="sm set-line"><span class="set-type t-${s.type || 'N'} mini">${(s.type || 'N') === 'N' ? ++n : s.type}</span>${prevText(ex, s)}${s.rpe ? ' @ RPE ' + s.rpe : ''}</div>`).join('')}</div>`; }).join('')}
+      <button class="btn wide" data-a="shareWorkout" data-id="${w.id}">${icon('share')} Share as image</button>
       <button class="btn primary wide" data-a="repeatWorkout" data-id="${w.id}">${icon('repeat')} Repeat this workout</button>
       <button class="btn wide" data-a="saveAsRoutine" data-id="${w.id}">${icon('device-floppy')} Save as routine</button>
       <button class="btn wide danger-ghost" data-a="deleteWorkout" data-id="${w.id}">${icon('trash')} Delete</button>`);
@@ -404,6 +406,13 @@ Object.assign(UI, {
         <label class="field">Weekly workout goal<input inputmode="numeric" data-setting="weekGoal" value="${s.weekGoal}"></label>
         <label class="field">Bar weight (${s.unit})<input inputmode="decimal" data-setting="bar" value="${s.bar}"></label>
         <label class="field">Body weight (${s.unit})<input inputmode="decimal" data-setting="bodyweight" value="${s.bodyweight}"></label>
+      </div>
+      <div class="field">Workout reminders
+        <div class="chips" style="margin-top:6px">${[[2, 'Mon'], [3, 'Tue'], [4, 'Wed'], [5, 'Thu'], [6, 'Fri'], [7, 'Sat'], [1, 'Sun']].map(([n, l]) => `<button class="chip ${((s.reminders || {}).days || []).includes(n) ? 'on' : ''}" data-a="toggleReminder" data-id="${n}" aria-pressed="${((s.reminders || {}).days || []).includes(n)}">${l}</button>`).join('')}</div>
+        <input type="time" data-a-change="reminderTime" value="${esc((s.reminders || {}).time || '18:00')}" style="margin-top:6px" aria-label="Reminder time"></div>
+      <div class="grid2">
+        <label class="field">Theme<select data-setting="theme"><option value="system" ${(s.theme || 'system') === 'system' ? 'selected' : ''}>Match phone</option><option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>Dark</option><option value="light" ${s.theme === 'light' ? 'selected' : ''}>Light</option></select></label>
+        <label class="field">Text size<select data-setting="textSize"><option value="1" ${(s.textSize || '1') == '1' ? 'selected' : ''}>Normal</option><option value="1.12" ${s.textSize == '1.12' ? 'selected' : ''}>Large</option><option value="1.25" ${s.textSize == '1.25' ? 'selected' : ''}>Extra large</option></select></label>
       </div>
       <div class="field">My gym has <span class="muted sm">(the coach and program builder only use this equipment)</span>
         <div class="chips" style="margin-top:6px">${Object.entries(EQUIPMENT).map(([k, v]) => `<button class="chip ${Plan.gym().includes(k) ? 'on' : ''}" data-a="toggleGym" data-id="${k}">${v}</button>`).join('')}</div></div>

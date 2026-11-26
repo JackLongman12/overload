@@ -10,6 +10,7 @@ const UI = {
   async init() {
     await Store.load();
     await Sync.load();
+    applyLook();
     this.bind();
     if (HC.on) HC.pull().then(() => { if (!this.stack.length) this.render(); });
     this.render();
@@ -76,11 +77,13 @@ const UI = {
     document.body.classList.add('sheet-open');
     const s = this.top();
     const prevScroll = root.firstElementChild && root.firstElementChild.dataset.key === s.key ? $('.sheet-body', root).scrollTop : 0;
-    root.innerHTML = `<div class="sheet" data-key="${s.key}">
+    root.innerHTML = `<div class="sheet" data-key="${s.key}" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
       <header class="sheet-head"><button class="icon-btn" data-a="closeSheet" aria-label="Back">${icon(s.key === 'workout' ? 'chevron-down' : 'arrow-left')}</button>
-      <h2>${s.title}</h2>${s.action || '<span style="width:40px"></span>'}</header>
+      <h2 id="sheetTitle" tabindex="-1">${s.title}</h2>${s.action || '<span style="width:40px"></span>'}</header>
       <div class="sheet-body">${s.render()}</div>${s.footer ? s.footer() : ''}</div>`;
     $('.sheet-body', root).scrollTop = prevScroll;
+    if (!prevScroll && this._lastSheet !== s.key) { const h = $('#sheetTitle'); if (h && h.focus) h.focus({ preventScroll: true }); }
+    this._lastSheet = s.key;
     if (s.mount) s.mount();
     this.renderBanner();
   },
@@ -130,7 +133,8 @@ const UI = {
       <div class="stat"><div class="muted sm">Time</div><b>${fmtDur(wk.reduce((s, w) => s + ((w.end || w.start) - w.start) / 1000, 0)).replace(/:\d\d$/, '')}<span class="muted sm"> h</span></b></div>
     </div>
     <div class="section-head"><h3>Muscle recovery</h3><span class="muted sm">estimated</span></div>
-    <div class="chips">${recList.map(([m, p]) => `<span class="chip rec ${p >= 90 ? 'ok' : p >= 50 ? 'mid' : 'low'}">${MUSCLES[m]} ${p}%</span>`).join('')}</div>
+    <div class="card">${BodyMap.svg(rec, 'recovery')}<div class="bm-legend sm muted"><span class="bm-0">■</span> Fresh <span class="bm-2">■</span> Recovering <span class="bm-3">■</span> Fatigued</div>
+    ${recList.filter(([, p]) => p < 90).length ? `<div class="chips" style="margin-top:8px">${recList.filter(([, p]) => p < 90).map(([m, p]) => `<span class="chip rec ${p >= 50 ? 'mid' : 'low'}">${MUSCLES[m]} ${p}%</span>`).join('')}</div>` : '<div class="sm muted center">Everything is recovered. Good day for a big session.</div>'}</div>
     <div style="height:20px"></div>`;
   },
 
@@ -180,11 +184,17 @@ const UI = {
       <div class="stat"><div class="muted sm">Total volume</div><b>${fmtNum(ws.reduce((a, w) => a + workoutVolume(w), 0) / 1000)}<span class="muted sm">k ${U()}</span></b></div>
     </div>
     <div class="card"><div class="row-between"><b>Weekly volume</b><span class="muted sm">${U()}</span></div>${barChart(weeks, { label: 'weekly volume', fmt: fmtNum })}</div>
+    <div class="card"><div class="row-between"><b>${this._mapMode === 'recovery' ? 'Recovery right now' : 'Muscles trained this week'}</b><button class="link sm" data-a="mapMode">${this._mapMode === 'recovery' ? 'Show sets' : 'Show recovery'}</button></div>
+      ${this._mapMode === 'recovery' ? BodyMap.svg(Coach.recovery(), 'recovery') : BodyMap.svg(Coach.weeklySets(), 'sets')}
+      <div class="bm-legend sm muted">${this._mapMode === 'recovery' ? '<span class="bm-0">■</span> Fresh <span class="bm-2">■</span> Recovering <span class="bm-3">■</span> Fatigued' : '<span class="bm-1">■</span> 1–5 sets <span class="bm-2">■</span> 6–11 <span class="bm-3">■</span> 12+'}</div></div>
     <div class="card"><b>Consistency</b>${heatmap(ws)}</div>
     <div class="card"><b>Sets per muscle, last 30 days</b>
       ${mList.length ? mList.map(([m, v]) => `<div class="hbar"><span>${MUSCLES[m] || m}</span><div><div style="width:${v / mMax * 100}%"></div></div><span>${v}</span></div>`).join('') : '<div class="empty-chart">No data yet</div>'}</div>
     <div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
     ${prs.length ? `<div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : '<div class="empty">Personal records show up here.</div>'}
+    <div class="section-head"><h3>${icon('award')} Achievements</h3><span class="muted sm">${Achievements.unlocked().size} of ${Achievements.LIST.length}</span></div>
+    <div class="badges">${(() => { const u = Achievements.unlocked(); return Achievements.LIST.map(([id, name, desc]) => `<div class="badge ${u.has(id) ? 'on' : ''}" title="${esc(desc)}">${icon(u.has(id) ? 'award' : 'lock')}<b>${esc(name)}</b><span>${esc(desc)}</span></div>`).join(''); })()}</div>
+    <div class="grid2" style="margin-top:12px"><button class="btn" data-a="report" data-id="30">${icon('file-type-pdf')} 30-day report</button><button class="btn" data-a="report" data-id="90">${icon('file-type-pdf')} 90-day report</button></div>
     <div class="section-head"><h3>History</h3><span class="muted sm">${ws.length} workouts</span></div>
     ${ws.slice(0, this._histN || 15).map(w => historyCard(w)).join('') || '<div class="empty">Finished workouts show up here.</div>'}
     ${ws.length > (this._histN || 15) ? `<button class="btn wide" data-a="moreHistory">Show more</button>` : ''}
@@ -306,10 +316,10 @@ const UI = {
   startRest(sec) {
     if (!sec) return;
     this.restTotal = sec; this.restEnd = Date.now() + sec * 1000; this._restBeeped = false;
-    Notify.ensure().then(ok => ok && Notify.at(REST_NOTIF, this.restEnd, 'Rest over', 'Time for your next set'));
+    Notify.ensure().then(ok => { if (ok) { Notify.at(REST_NOTIF, this.restEnd, 'Rest over', 'Time for your next set'); RestNotif.show(); } });
     this.refreshSheet();
   },
-  stopRest() { this.restEnd = 0; Notify.cancel(REST_NOTIF); this.refreshSheet(); },
+  stopRest() { this.restEnd = 0; Notify.cancel(REST_NOTIF); RestNotif.hide(); this.refreshSheet(); },
 
   tick() {
     const a = Store.data.active;
@@ -320,7 +330,7 @@ const UI = {
       const el = $('#restLeft'); if (el) el.textContent = fmtDur(Math.max(0, left));
       const fill = $('.rest-fill'); if (fill) fill.style.width = (1 - Math.max(0, left) / this.restTotal) * 100 + '%';
       if (left <= 3 && left > 0) beep(660, 90, 0.15);
-      if (left <= 0 && !this._restBeeped) { this._restBeeped = true; beep(988, 400); buzz([400]); this.restEnd = 0; Notify.cancel(REST_NOTIF); if (this.top() && this.top().key === 'workout') this.refreshSheet(); toast('Rest over'); }
+      if (left <= 0 && !this._restBeeped) { this._restBeeped = true; beep(988, 400); buzz([400]); this.restEnd = 0; Notify.cancel(REST_NOTIF); RestNotif.hide(); if (this.top() && this.top().key === 'workout') this.refreshSheet(); toast('Rest over'); }
     }
   },
 
@@ -347,7 +357,9 @@ const UI = {
     this.restEnd = 0; Notify.cancel(REST_NOTIF);
     this.stack = []; this.render();
     beep(1046, 150); setTimeout(() => beep(1318, 250), 160); buzz([80]);
+    const unlocked = Achievements.check(); w.badges = unlocked.map(a => a[1]);
     this.openSheet('summary', 'Workout complete', () => summaryBody(w, prs));
+    if (unlocked.length) setTimeout(() => toast(`${icon('award')} Achievement unlocked: ${unlocked[0][1]}`.replace(/<[^>]+>/g, ''), 3500), 900);
     Sync.run('finish');
   },
 
@@ -382,7 +394,9 @@ const UI = {
     const isNew = !r;
     this.openSheet('routine', isNew ? 'New routine' : 'Edit routine', () => {
       const d = this.draft;
+      const folders = [...new Set(Store.data.routines.map(r => r.folder || r.program).filter(Boolean))];
       return `<input class="title-input" data-rf="name" value="${esc(d.name)}" aria-label="Routine name">
+      <label class="field">Folder <span class="muted sm">(optional, groups routines on Home)</span><input data-rf="folder" list="folderList" value="${esc(d.folder || d.program || '')}" placeholder="e.g. Summer cut"><datalist id="folderList">${folders.map(f => `<option value="${esc(f)}">`).join('')}</datalist></label>
       ${d.exercises.map((e, i) => { const ex = Store.ex(e.exId); const isT = ex.type === 'dur'; const none = ex.type === 'dist' || ex.type === 'climb'; return `
         <div class="card"><div class="row-between"><b>${esc(ex.name)}</b><span>
           <button class="icon-btn" data-a="rMove" data-i="${i}" data-v="-1" aria-label="Move up">${icon('arrow-up')}</button>
@@ -395,7 +409,7 @@ const UI = {
           <label class="sm muted">Rest <select data-rf="rest" data-i="${i}">${[0, 30, 45, 60, 90, 120, 150, 180, 240, 300].map(v => `<option value="${v}" ${+e.rest === v ? 'selected' : ''}>${v ? fmtDur(v) : 'Off'}</option>`).join('')}</select></label>
         </div>`; }).join('') || '<div class="empty">Add exercises to this routine.</div>'}
       <button class="btn wide" data-a="rAddEx">${icon('plus')} Add exercise</button>
-      ${isNew ? '' : `<button class="btn wide danger-ghost" data-a="rDelete">${icon('trash')} Delete routine</button>`}<div style="height:80px"></div>`;
+      ${isNew ? '' : `<button class="btn wide" data-a="rDuplicate">${icon('copy')} Duplicate routine</button><button class="btn wide danger-ghost" data-a="rDelete">${icon('trash')} Delete routine</button>`}<div style="height:80px"></div>`;
     }, { action: `<button class="btn primary sm" data-a="rSave">Save</button>` });
   },
 
@@ -433,7 +447,7 @@ const UI = {
     if (ds.f === 'pickq') { this.pick.q = v; $('#pickList').innerHTML = this.pickList(); }
     if (ds.rf && this.draft) {
       const d = this.draft;
-      if (ds.rf === 'name') d.name = v; else d.exercises[+ds.i][ds.rf] = +v || 0;
+      if (ds.rf === 'name') d.name = v; else if (ds.rf === 'folder') { d.folder = v.trim(); if (d.program && d.folder !== d.program) delete d.program; } else d.exercises[+ds.i][ds.rf] = +v || 0;
     }
     if (ds.setting) {
       const s = Store.data.settings;
@@ -446,6 +460,7 @@ const UI = {
       }
       else s[ds.setting] = v;
       Store.save();
+      if (['theme', 'textSize'].includes(ds.setting)) applyLook();
       if (isChange && ['unit', 'autoUpdate', 'autoSync'].includes(ds.setting)) this.refreshSheet();
     }
     if (ds.ci) { this.ci[ds.ci] = +v; const out = $('#ci-' + ds.ci); if (out) out.textContent = v; const sc = $('#ciScore'); if (sc) sc.textContent = readinessScore(this.ci); }
@@ -456,11 +471,20 @@ const UI = {
   }
 };
 
+// Theme and text size (accessibility)
+function applyLook() {
+  const s = Store.data.settings, root = document.documentElement;
+  if (!root || !root.setAttribute) return;
+  if (s.theme === 'light' || s.theme === 'dark') root.setAttribute('data-theme', s.theme); else root.removeAttribute('data-theme');
+  if (document.body && document.body.style) document.body.style.zoom = s.textSize && s.textSize != '1' ? s.textSize : '';
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.setAttribute('content', getComputedStyle(document.body).backgroundColor || '#0f1115');
+}
 // ---------- Helpers used by views
 // Routines grouped by the program they came from, with the next one to do in each program
 function routineGroups(d) {
   const groups = [], byName = {};
-  d.routines.forEach(r => { const k = r.program || ''; if (!byName[k]) { byName[k] = { name: k, routines: [] }; groups.push(byName[k]); } byName[k].routines.push(r); });
+  d.routines.forEach(r => { const k = r.folder || r.program || ''; if (!byName[k]) { byName[k] = { name: k, routines: [] }; groups.push(byName[k]); } byName[k].routines.push(r); });
   const sorted = Store.workoutsSorted();
   groups.forEach(g => {
     if (!g.name) return;
@@ -592,9 +616,11 @@ function summaryBody(w, prs) {
   const sets = w.exercises.reduce((s, e) => s + e.sets.length, 0);
   return `<div class="celebrate">${icon('trophy')}<h2>Nice work</h2><div class="muted">${esc(w.name)} · ${fmtDate(w.start)}</div></div>
     <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${mins} min</b></div><div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div><div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div></div>
+    ${w.badges && w.badges.length ? `<div class="card accent-card col"><b>${icon('award')} Achievement${w.badges.length > 1 ? 's' : ''} unlocked</b><div class="sm">${w.badges.map(esc).join(' · ')}</div></div>` : ''}
     ${prs.length ? `<div class="card"><b>${icon('trophy')} New records</b>${prs.map(p => `<div class="li static"><span>${esc(p.ex)}<span class="sm muted"> · ${p.what}</span></span><b>${esc(p.val)}</b></div>`).join('')}</div>` : ''}
     <div class="card"><b>${icon('sparkles')} Next session plan</b>${w.exercises.map(e => { const s = Coach.suggest(e.exId, e.target); return `<div class="li static col"><span><b>${esc(Store.ex(e.exId).name)}</b>: ${esc(s.title)}</span><span class="sm muted">${esc(s.text)}</span></div>`; }).join('')}</div>
     ${w.routineId && Store.data.routines.find(r => r.id === w.routineId) ? `<button class="btn wide" data-a="updateRoutineFrom" data-id="${w.id}">${icon('device-floppy')} Update routine with this workout's exercises</button>` : `<button class="btn wide" data-a="saveAsRoutine" data-id="${w.id}">${icon('device-floppy')} Save as routine</button>`}
+    <button class="btn wide" data-a="shareWorkout" data-id="${w.id}">${icon('share')} Share as image</button>
     <button class="btn primary wide" data-a="closeSheet">Done</button>`;
 }
 

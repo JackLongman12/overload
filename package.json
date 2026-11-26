@@ -29,6 +29,7 @@
     "@capacitor/cli": "^8.6.3",
     "@mediapipe/tasks-vision": "^1.2.3",
     "@tabler/icons-webfont": "^3.53.0",
-    "adm-zip": "^0.6.1"
+    "adm-zip": "^0.6.1",
+    "jspdf": "^4.2.1"
   }
 }

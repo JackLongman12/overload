@@ -88,7 +88,7 @@ const Actions = {
     Store.save(); this.refreshSheet(); toast('Coach plan applied');
   },
   swapEx(el, d) { const a = Store.data.active, old = a.exercises[+d.i]; a.exercises[+d.i] = this.makeWorkoutEx(d.id, null, old.rest); Store.save(); this.refreshSheet(); toast('Switched to ' + Store.ex(d.id).name); },
-  restAdj(el, d) { if (!this.restEnd) return; this.restEnd += +d.v * 1000; this.restTotal = Math.max(1, this.restTotal + +d.v); Notify.at(REST_NOTIF, this.restEnd, 'Rest over', 'Time for your next set'); this.tick(); },
+  restAdj(el, d) { if (!this.restEnd) return; this.restEnd += +d.v * 1000; this.restTotal = Math.max(1, this.restTotal + +d.v); Notify.at(REST_NOTIF, this.restEnd, 'Rest over', 'Time for your next set'); RestNotif.show(); this.tick(); },
   restSkip() { this.stopRest(); },
   exMenu(el, d) {
     const i = +d.i, a = Store.data.active, e = a.exercises[i];
@@ -203,6 +203,21 @@ const Actions = {
   poseReset() { if (Pose.state) { Pose.state.reps = 0; Pose.state.phase = 'up'; Pose.state.cue = 'Start your set'; Pose.state.onUpdate(Pose.state); } },
   async poseFlip() { Pose.facing = Pose.facing === 'user' ? 'environment' : 'user'; this.refreshSheet(); },
   aiDelete() { const fs = Plugin('Filesystem'); if (fs) fs.rmdir({ path: 'ai', directory: 'DATA', recursive: true }).catch(() => { }); delete Store.data.settings.aiPack; Store.save(true); Pose.landmarker = null; toast('AI pack removed'); this.refreshSheet(); },
+
+  // ----- Batch 3
+  rDuplicate() {
+    const c = JSON.parse(JSON.stringify(this.draft)); c.id = uid(); c.name = this.draft.name + ' (copy)'; c.u = Date.now();
+    Store.data.routines.push(c); Store.save(true); this.closeSheet(); this.editRoutine(c); toast('Routine duplicated');
+  },
+  mapMode() { this._mapMode = this._mapMode === 'recovery' ? 'sets' : 'recovery'; this.render(); },
+  async shareWorkout(el, d) { const w = Store.data.workouts.find(x => x.id === d.id); if (w) await ShareImage.share(w); },
+  async report(el, d) { toast('Building your report…'); await Report.share(+d.id); },
+  toggleReminder(el, d) {
+    const s = Store.data.settings, r = s.reminders = s.reminders || { days: [], time: '18:00' }, n = +d.id, i = r.days.indexOf(n);
+    if (i >= 0) r.days.splice(i, 1); else r.days.push(n);
+    Store.save(); Reminders.apply(); this.refreshSheet();
+  },
+  reminderTime(el) { const s = Store.data.settings; s.reminders = s.reminders || { days: [], time: '18:00' }; s.reminders.time = el.value || '18:00'; Store.save(); Reminders.apply(); toast('Reminder time set'); },
 
   // ----- Planning
   toggleGym(el, d) {

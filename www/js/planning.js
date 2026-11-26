@@ -32,8 +32,9 @@ const Plan = {
     if (week >= def.weeks.length) return { done: true, type: b.type, name: def.name, total: def.weeks.length };
     return { ...def.weeks[week], week: week + 1, total: def.weeks.length, type: b.type, name: def.name };
   },
-  startBlock(type) { Store.data.settings.block = { type, start: startOfWeek() }; Store.save(true); },
-  endBlock() { delete Store.data.settings.block; Store.save(true); },
+  countIfDone() { const b = this.block(); if (b && b.done) Store.data.settings.blocksDone = (Store.data.settings.blocksDone || 0) + 1; },
+  startBlock(type) { this.countIfDone(); Store.data.settings.block = { type, start: startOfWeek() }; Store.save(true); },
+  endBlock() { this.countIfDone(); delete Store.data.settings.block; Store.save(true); },
 
   // ---------- % of max
   // Training max = 90% of your best estimated 1RM in the last 8 weeks
