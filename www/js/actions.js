@@ -36,6 +36,7 @@ const Actions = {
   },
   rDelete() { if (!confirm('Delete this routine? Your workout history is kept.')) return; Store.data.routines = Store.data.routines.filter(r => r.id !== this.draft.id); Store.save(true); this.closeSheet(); },
   programs() { this.openPrograms(); },
+  progGoal(el, d) { this.progGoal = d.id; this.refreshSheet(); },
   addProgram(el, d) {
     const p = PROGRAMS.find(x => x.id === d.id);
     p.routines.forEach(([name, exs]) => Store.data.routines.push({ id: uid(), name, program: p.name, exercises: exs.map(([exId, sets, repMin, repMax]) => ({ exId, sets, repMin, repMax, rest: Store.ex(exId).type === 'dist' ? 0 : (repMax <= 8 ? 180 : Store.data.settings.rest) })) }));

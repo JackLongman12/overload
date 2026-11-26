@@ -213,3 +213,7 @@ body.sheet-open #nav, body.sheet-open #view { visibility: hidden; }
 .barbell { display: flex; align-items: center; justify-content: center; gap: 2px; margin: 10px 0 14px; min-height: 104px; }
 .plate { width: 22px; background: var(--acc); border-radius: 4px; color: #fff; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; }
 .bar-mid { width: 70px; height: 10px; background: var(--muted); border-radius: 3px; }
+.group-head { margin: 14px 4px 8px; display: flex; gap: 6px; align-items: center; font-weight: 600; }
+.routine.next { border-color: var(--acc); }
+.tag-next { font-size: 11px; background: var(--acc); color: #fff; padding: 1px 8px; border-radius: 99px; margin-left: 6px; vertical-align: 2px; }
+details summary { cursor: pointer; color: var(--acc); font-weight: 600; }

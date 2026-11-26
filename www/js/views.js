@@ -93,9 +93,18 @@ Object.assign(UI, {
   },
 
   openPrograms() {
-    this.openSheet('programs', 'Programs', () => `<p class="sm muted">Ready-made plans, free. Adding one creates its routines, and the coach handles progression.</p>
-      ${PROGRAMS.map(p => `<div class="card"><div class="row-between"><div><b>${esc(p.name)}</b><div class="sm muted">${esc(p.desc)}</div></div><button class="btn sm primary" data-a="addProgram" data-id="${p.id}">Add</button></div>
-      <div class="sm muted" style="margin-top:6px">${p.routines.map(r => `<div><b>${esc(r[0])}</b>: ${r[1].map(e => esc(Store.ex(e[0]).name)).join(', ')}</div>`).join('')}</div></div>`).join('')}`);
+    this.progGoal = this.progGoal || 'all';
+    this.openSheet('programs', 'Programs', () => {
+      const added = new Set(Store.data.routines.map(r => r.program).filter(Boolean));
+      const list = PROGRAMS.filter(p => this.progGoal === 'all' || p.goal === this.progGoal);
+      return `<p class="sm muted">${PROGRAMS.length} ready-made plans, all free. Adding one creates its routines, and the coach handles progression.</p>
+      <div class="chips scroll-x">${[['all', 'All'], ...Object.entries(PROGRAM_GOALS)].map(([k, v]) => `<button class="chip ${this.progGoal === k ? 'on' : ''}" data-a="progGoal" data-id="${k}">${v}</button>`).join('')}</div>
+      ${list.map(p => `<div class="card"><div class="row-between"><div><b>${esc(p.name)}</b>
+        <div class="chips" style="margin:6px 0 4px"><span class="chip ghost">${p.days} day${p.days > 1 ? 's' : ''}/week</span><span class="chip ghost">${esc(p.level)}</span><span class="chip ghost">${esc(p.equip)}</span></div>
+        <div class="sm muted">${esc(p.desc)}</div></div>
+        ${added.has(p.name) ? `<span class="sm acc">${icon('check')} Added</span>` : `<button class="btn sm primary" data-a="addProgram" data-id="${p.id}">Add</button>`}</div>
+        <details class="sm muted" style="margin-top:8px"><summary>${p.routines.length} workouts</summary>${p.routines.map(r => `<div style="margin-top:4px"><b>${esc(r[0])}</b>: ${r[1].map(e => esc(Store.ex(e[0]).name)).join(', ')}</div>`).join('')}</details></div>`).join('')}`;
+    });
   },
 
   openCustomEx() {

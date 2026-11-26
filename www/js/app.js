@@ -101,12 +101,14 @@ const UI = {
       <button class="btn big-btn" data-a="programs">${icon('books')} Programs</button>
     </div>
     <div class="section-head"><h3>Routines</h3><button class="link" data-a="newRoutine">${icon('plus')} New</button></div>
-    ${d.routines.length ? d.routines.map(r => `
-      <div class="card routine">
-        <div class="routine-main" data-a="editRoutine" data-id="${r.id}"><b>${esc(r.name)}</b>
+    ${d.routines.length ? routineGroups(d).map(g => `
+      ${g.name ? `<div class="group-head sm muted">${icon('books')} ${esc(g.name)}</div>` : '<div class="group-head sm muted">My routines</div>'}
+      ${g.routines.map(r => `
+      <div class="card routine ${r.id === g.next ? 'next' : ''}">
+        <div class="routine-main" data-a="editRoutine" data-id="${r.id}"><b>${esc(r.name)}</b>${r.id === g.next ? ' <span class="tag-next">Next</span>' : ''}
         <div class="sm muted clamp">${r.exercises.map(e => esc(Store.ex(e.exId).name)).join(', ') || 'No exercises'}</div></div>
         <button class="btn primary sm" data-a="startRoutine" data-id="${r.id}">Start</button>
-      </div>`).join('') : `<div class="empty">Create a routine or add a ready-made program. Routines are unlimited and free.</div>`}
+      </div>`).join('')}`).join('') : `<div class="empty">Create a routine or add a ready-made program. Routines are unlimited and free.</div>`}
     <div class="section-head"><h3>This week</h3></div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${wk.length}<span class="muted sm"> / ${d.settings.weekGoal}</span></b></div>
@@ -423,6 +425,19 @@ const UI = {
 };
 
 // ---------- Helpers used by views
+// Routines grouped by the program they came from, with the next one to do in each program
+function routineGroups(d) {
+  const groups = [], byName = {};
+  d.routines.forEach(r => { const k = r.program || ''; if (!byName[k]) { byName[k] = { name: k, routines: [] }; groups.push(byName[k]); } byName[k].routines.push(r); });
+  const sorted = Store.workoutsSorted();
+  groups.forEach(g => {
+    if (!g.name) return;
+    const ids = g.routines.map(r => r.id), last = sorted.find(w => ids.includes(w.routineId));
+    g.next = last ? ids[(ids.indexOf(last.routineId) + 1) % ids.length] : ids[0];
+  });
+  return groups.sort((a, b) => (a.name === '') - (b.name === ''));
+}
+
 function setColumns(ex) {
   return { wr: ['w', 'r', 'rpe'], wbw: ['w', 'r', 'rpe'], bw: ['r', 'rpe'], dur: ['t'], dist: ['d', 'tt'], climb: ['g', 'a', 'sent'] }[ex.type] || ['w', 'r'];
 }

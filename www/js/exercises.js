@@ -237,28 +237,100 @@ const CLIMB_GRADES = {
   route: ['5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', '5.11a', '5.11b', '5.11c', '5.11d', '5.12a', '5.12b', '5.12c', '5.12d', '5.13a']
 };
 
-// Ready-made programs (all free).
+// Ready-made programs (all free). Each routine: [name, [[exerciseId, sets, repMin, repMax], ...]]
+// For timed exercises repMin/repMax are seconds; for distance/climb they're ignored.
+// goal: muscle | strength | home | conditioning | sport | mobility
+const PROGRAM_GOALS = { muscle: 'Build muscle', strength: 'Get stronger', home: 'At home', conditioning: 'Conditioning', sport: 'Sport', mobility: 'Mobility' };
 const PROGRAMS = [
-  { id: 'ppl', name: 'Push pull legs', desc: '6 days, hypertrophy', routines: [
+  // ---------- Build muscle
+  { id: 'ppl', name: 'Push pull legs', goal: 'muscle', level: 'Intermediate', days: 3, equip: 'Gym', desc: 'The classic split. Run it 3 days a week, or twice through for 6.', routines: [
     ['Push', [['bench_press_barbell', 4, 6, 10], ['seated_shoulder_press_dumbbell', 3, 8, 12], ['incline_bench_press_dumbbell', 3, 8, 12], ['lateral_raise_dumbbell', 3, 12, 20], ['triceps_pushdown_cable', 3, 10, 15]]],
     ['Pull', [['pull_up_weighted', 4, 6, 10], ['bent_over_row_barbell', 3, 8, 12], ['seated_cable_row', 3, 10, 12], ['face_pull', 3, 12, 20], ['bicep_curl_dumbbell', 3, 10, 15]]],
     ['Legs', [['squat_barbell', 4, 5, 8], ['romanian_deadlift_barbell', 3, 8, 12], ['leg_press_machine', 3, 10, 15], ['lying_leg_curl_machine', 3, 10, 15], ['standing_calf_raise_machine', 4, 10, 20]]]] },
-  { id: 'ul', name: 'Upper lower', desc: '4 days, strength and size', routines: [
+  { id: 'ppl6', name: 'Push pull legs, 6 day (A/B)', goal: 'muscle', level: 'Advanced', days: 6, equip: 'Gym', desc: 'Two versions of each day so every muscle is hit twice a week with variety.', routines: [
+    ['Push A', [['bench_press_barbell', 4, 5, 8], ['overhead_press_barbell', 3, 6, 10], ['incline_bench_press_dumbbell', 3, 8, 12], ['lateral_raise_dumbbell', 4, 12, 20], ['skullcrusher_ez_bar', 3, 8, 12]]],
+    ['Pull A', [['deadlift_barbell', 3, 3, 6], ['pull_up_weighted', 3, 6, 10], ['seated_cable_row', 3, 8, 12], ['face_pull', 3, 12, 20], ['hammer_curl_dumbbell', 3, 10, 15]]],
+    ['Legs A', [['squat_barbell', 4, 5, 8], ['romanian_deadlift_barbell', 3, 8, 10], ['bulgarian_split_squat', 3, 8, 12], ['seated_leg_curl_machine', 3, 10, 15], ['standing_calf_raise_machine', 4, 10, 15]]],
+    ['Push B', [['incline_bench_press_barbell', 4, 6, 10], ['seated_shoulder_press_dumbbell', 3, 8, 12], ['cable_fly_crossovers', 3, 12, 15], ['lateral_raise_cable', 3, 12, 20], ['overhead_triceps_extension_cable', 3, 10, 15]]],
+    ['Pull B', [['bent_over_row_barbell', 4, 6, 10], ['lat_pulldown_cable', 3, 8, 12], ['dumbbell_row', 3, 8, 12], ['reverse_pec_deck', 3, 12, 20], ['incline_curl_dumbbell', 3, 10, 15]]],
+    ['Legs B', [['front_squat_barbell', 3, 6, 10], ['hip_thrust_barbell', 3, 8, 12], ['hack_squat_machine', 3, 10, 15], ['lying_leg_curl_machine', 3, 10, 15], ['seated_calf_raise', 4, 12, 20]]]] },
+  { id: 'ul', name: 'Upper lower', goal: 'muscle', level: 'Intermediate', days: 4, equip: 'Gym', desc: 'Four days, each muscle twice a week. Easy to recover from.', routines: [
     ['Upper A', [['bench_press_barbell', 4, 5, 8], ['bent_over_row_barbell', 4, 6, 10], ['overhead_press_barbell', 3, 6, 10], ['lat_pulldown_cable', 3, 8, 12], ['bicep_curl_barbell', 2, 10, 15], ['skullcrusher_ez_bar', 2, 10, 15]]],
     ['Lower A', [['squat_barbell', 4, 5, 8], ['romanian_deadlift_barbell', 3, 8, 10], ['bulgarian_split_squat', 3, 8, 12], ['seated_leg_curl_machine', 3, 10, 15], ['hanging_leg_raise', 3, 8, 15]]],
     ['Upper B', [['incline_bench_press_dumbbell', 4, 8, 12], ['dumbbell_row', 4, 8, 12], ['arnold_press_dumbbell', 3, 8, 12], ['chest_dip', 3, 8, 15], ['hammer_curl_dumbbell', 3, 10, 15]]],
     ['Lower B', [['deadlift_barbell', 3, 3, 6], ['front_squat_barbell', 3, 6, 10], ['hip_thrust_barbell', 3, 8, 12], ['leg_extension_machine', 3, 12, 15], ['seated_calf_raise', 3, 12, 20]]]] },
-  { id: 'fb', name: 'Full body 3x', desc: '3 days, beginner friendly', routines: [
-    ['Full body A', [['squat_barbell', 3, 5, 8], ['bench_press_barbell', 3, 5, 8], ['bent_over_row_barbell', 3, 6, 10], ['plank', 3, 30, 60]]],
-    ['Full body B', [['deadlift_barbell', 3, 3, 5], ['overhead_press_barbell', 3, 5, 8], ['lat_pulldown_cable', 3, 8, 12], ['walking_lunge_dumbbell', 3, 8, 12]]]] },
-  { id: '5x5', name: 'Strength 5x5', desc: '3 days, linear progression', routines: [
+  { id: 'arnold', name: 'Arnold split', goal: 'muscle', level: 'Advanced', days: 6, equip: 'Gym', desc: 'Chest and back, shoulders and arms, legs. Run twice a week. High volume.', routines: [
+    ['Chest and back', [['bench_press_barbell', 4, 6, 10], ['pull_up_weighted', 4, 6, 10], ['incline_bench_press_dumbbell', 3, 8, 12], ['bent_over_row_barbell', 3, 8, 12], ['chest_fly_dumbbell', 3, 12, 15], ['straight_arm_pulldown', 3, 12, 15]]],
+    ['Shoulders and arms', [['overhead_press_barbell', 4, 6, 10], ['lateral_raise_dumbbell', 4, 12, 20], ['rear_delt_fly_dumbbell', 3, 12, 20], ['bicep_curl_barbell', 3, 8, 12], ['close_grip_bench_press', 3, 6, 10], ['hammer_curl_dumbbell', 3, 10, 15], ['triceps_pushdown_cable', 3, 10, 15]]],
+    ['Legs', [['squat_barbell', 4, 5, 8], ['romanian_deadlift_barbell', 3, 8, 12], ['leg_press_machine', 3, 10, 15], ['lying_leg_curl_machine', 3, 10, 15], ['standing_calf_raise_machine', 4, 10, 20], ['cable_crunch', 3, 10, 15]]]] },
+  { id: 'bro', name: 'Body part split', goal: 'muscle', level: 'Intermediate', days: 5, equip: 'Gym', desc: 'One muscle group a day, lots of sets for each. The bodybuilding classic.', routines: [
+    ['Chest', [['bench_press_barbell', 4, 6, 10], ['incline_bench_press_dumbbell', 4, 8, 12], ['chest_press_machine', 3, 10, 12], ['cable_fly_crossovers', 3, 12, 15], ['chest_dip', 2, 8, 15]]],
+    ['Back', [['deadlift_barbell', 3, 3, 6], ['pull_up_weighted', 4, 6, 10], ['bent_over_row_barbell', 3, 8, 12], ['lat_pulldown_cable', 3, 10, 12], ['seated_cable_row', 3, 10, 12]]],
+    ['Shoulders', [['overhead_press_barbell', 4, 6, 10], ['seated_shoulder_press_dumbbell', 3, 8, 12], ['lateral_raise_dumbbell', 4, 12, 20], ['reverse_pec_deck', 3, 12, 20], ['shrug_dumbbell', 3, 10, 15]]],
+    ['Arms', [['close_grip_bench_press', 3, 6, 10], ['bicep_curl_barbell', 3, 8, 12], ['skullcrusher_ez_bar', 3, 8, 12], ['incline_curl_dumbbell', 3, 10, 15], ['triceps_pushdown_cable', 3, 10, 15], ['hammer_curl_dumbbell', 3, 10, 15]]],
+    ['Legs', [['squat_barbell', 4, 5, 8], ['leg_press_machine', 3, 10, 15], ['romanian_deadlift_barbell', 3, 8, 12], ['leg_extension_machine', 3, 12, 15], ['seated_leg_curl_machine', 3, 10, 15], ['standing_calf_raise_machine', 4, 10, 20]]]] },
+  { id: 'glutes', name: 'Glutes and legs focus', goal: 'muscle', level: 'Beginner', days: 3, equip: 'Gym', desc: 'Lower-body priority with a lighter upper-body day.', routines: [
+    ['Glutes and hamstrings', [['hip_thrust_barbell', 4, 8, 12], ['romanian_deadlift_barbell', 3, 8, 12], ['bulgarian_split_squat', 3, 8, 12], ['cable_kickback', 3, 12, 15], ['hip_abduction_machine', 3, 15, 20]]],
+    ['Upper body', [['incline_bench_press_dumbbell', 3, 8, 12], ['lat_pulldown_cable', 3, 8, 12], ['seated_shoulder_press_dumbbell', 3, 8, 12], ['seated_cable_row', 3, 10, 12], ['face_pull', 3, 12, 20]]],
+    ['Quads and glutes', [['squat_barbell', 4, 6, 10], ['leg_press_machine', 3, 10, 15], ['walking_lunge_dumbbell', 3, 10, 12], ['glute_bridge', 3, 12, 20], ['leg_extension_machine', 3, 12, 15]]]] },
+
+  // ---------- Get stronger
+  { id: '5x5', name: 'Beginner strength 5x5', goal: 'strength', level: 'Beginner', days: 3, equip: 'Barbell', desc: 'Alternate A and B. Add weight every session while you can. The coach handles it.', routines: [
     ['5x5 A', [['squat_barbell', 5, 5, 5], ['bench_press_barbell', 5, 5, 5], ['bent_over_row_barbell', 5, 5, 5]]],
     ['5x5 B', [['squat_barbell', 5, 5, 5], ['overhead_press_barbell', 5, 5, 5], ['deadlift_barbell', 1, 5, 5]]]] },
-  { id: 'cali', name: 'Calisthenics foundations', desc: '3 days, no equipment but a bar', routines: [
+  { id: 'fb', name: 'Full body 3x', goal: 'strength', level: 'Beginner', days: 3, equip: 'Gym', desc: 'Three different full-body days. The best place to start.', routines: [
+    ['Full body A', [['squat_barbell', 3, 5, 8], ['bench_press_barbell', 3, 5, 8], ['bent_over_row_barbell', 3, 6, 10], ['plank', 3, 30, 60]]],
+    ['Full body B', [['deadlift_barbell', 3, 3, 5], ['overhead_press_barbell', 3, 5, 8], ['lat_pulldown_cable', 3, 8, 12], ['walking_lunge_dumbbell', 3, 8, 12]]],
+    ['Full body C', [['front_squat_barbell', 3, 6, 8], ['incline_bench_press_dumbbell', 3, 8, 12], ['pull_up', 3, 5, 10], ['hip_thrust_barbell', 3, 8, 12], ['hanging_leg_raise', 3, 8, 15]]]] },
+  { id: 'phul', name: 'Power and size 4-day', goal: 'strength', level: 'Intermediate', days: 4, equip: 'Gym', desc: 'Two heavy power days and two higher-rep size days.', routines: [
+    ['Upper power', [['bench_press_barbell', 4, 3, 5], ['bent_over_row_barbell', 4, 3, 5], ['overhead_press_barbell', 3, 5, 8], ['pull_up_weighted', 3, 5, 8], ['bicep_curl_barbell', 2, 6, 10]]],
+    ['Lower power', [['squat_barbell', 4, 3, 5], ['deadlift_barbell', 3, 3, 5], ['leg_press_machine', 3, 8, 12], ['lying_leg_curl_machine', 3, 6, 10], ['standing_calf_raise_machine', 4, 6, 10]]],
+    ['Upper size', [['incline_bench_press_dumbbell', 4, 8, 12], ['seated_cable_row', 4, 8, 12], ['lateral_raise_dumbbell', 4, 12, 20], ['cable_fly_crossovers', 3, 12, 15], ['incline_curl_dumbbell', 3, 10, 15], ['overhead_triceps_extension_cable', 3, 10, 15]]],
+    ['Lower size', [['front_squat_barbell', 4, 8, 12], ['romanian_deadlift_barbell', 4, 8, 12], ['walking_lunge_dumbbell', 3, 10, 12], ['leg_extension_machine', 3, 12, 15], ['seated_calf_raise', 4, 12, 20]]]] },
+  { id: 'pb', name: 'Powerbuilding 4-day', goal: 'strength', level: 'Advanced', days: 4, equip: 'Barbell', desc: 'One big lift per day, heavy, then bodybuilding accessories.', routines: [
+    ['Squat day', [['squat_barbell', 5, 3, 5], ['front_squat_barbell', 3, 6, 8], ['bulgarian_split_squat', 3, 8, 12], ['lying_leg_curl_machine', 3, 10, 15], ['ab_wheel_rollout', 3, 8, 12]]],
+    ['Bench day', [['bench_press_barbell', 5, 3, 5], ['close_grip_bench_press', 3, 6, 8], ['incline_bench_press_dumbbell', 3, 8, 12], ['dumbbell_row', 3, 8, 12], ['triceps_pushdown_cable', 3, 10, 15]]],
+    ['Deadlift day', [['deadlift_barbell', 4, 2, 5], ['romanian_deadlift_barbell', 3, 6, 10], ['pull_up_weighted', 4, 5, 8], ['hip_thrust_barbell', 3, 8, 12], ['back_extension', 3, 10, 15]]],
+    ['Press day', [['overhead_press_barbell', 5, 3, 5], ['push_press', 3, 4, 6], ['chin_up_weighted', 3, 5, 8], ['lateral_raise_dumbbell', 4, 12, 20], ['bicep_curl_barbell', 3, 8, 12]]]] },
+  { id: 'min2', name: 'Minimalist 2-day', goal: 'strength', level: 'Beginner', days: 2, equip: 'Gym', desc: 'For busy weeks. Two 45-minute sessions that cover everything.', routines: [
+    ['Minimal A', [['squat_barbell', 3, 5, 8], ['bench_press_barbell', 3, 5, 8], ['lat_pulldown_cable', 3, 8, 12], ['plank', 2, 30, 60]]],
+    ['Minimal B', [['deadlift_barbell', 2, 3, 5], ['overhead_press_barbell', 3, 5, 8], ['seated_cable_row', 3, 8, 12], ['walking_lunge_dumbbell', 2, 10, 12]]]] },
+
+  // ---------- At home
+  { id: 'db', name: 'Dumbbells only', goal: 'home', level: 'Beginner', days: 3, equip: 'Dumbbells', desc: 'A full program with just a pair of dumbbells and a bench or floor.', routines: [
+    ['DB full body A', [['goblet_squat', 4, 8, 15], ['bench_press_dumbbell', 4, 8, 12], ['dumbbell_row', 4, 8, 12], ['lateral_raise_dumbbell', 3, 12, 20], ['bicep_curl_dumbbell', 3, 10, 15]]],
+    ['DB full body B', [['romanian_deadlift_dumbbell', 4, 8, 12], ['seated_shoulder_press_dumbbell', 4, 8, 12], ['bulgarian_split_squat', 3, 8, 12], ['chest_fly_dumbbell', 3, 12, 15], ['hammer_curl_dumbbell', 3, 10, 15]]],
+    ['DB full body C', [['walking_lunge_dumbbell', 3, 10, 12], ['incline_bench_press_dumbbell', 4, 8, 12], ['rear_delt_fly_dumbbell', 3, 12, 20], ['shrug_dumbbell', 3, 10, 15], ['russian_twist', 3, 15, 25]]]] },
+  { id: 'cali', name: 'Calisthenics foundations', goal: 'home', level: 'Beginner', days: 3, equip: 'Pull-up bar', desc: 'Bodyweight strength. Use the skill ladders to level up each move.', routines: [
     ['Cali pull and legs', [['pull_up', 4, 5, 10], ['chin_up', 3, 5, 10], ['bulgarian_split_squat_bodyweight', 3, 8, 15], ['hanging_leg_raise', 3, 8, 15], ['hollow_body_hold', 3, 20, 45]]],
     ['Cali push and core', [['push_up', 4, 10, 20], ['pike_push_up', 3, 6, 12], ['triceps_dip', 3, 8, 15], ['l_sit', 3, 10, 30], ['plank', 3, 30, 60]]]] },
-  { id: 'run', name: 'Run base builder', desc: '3 runs a week, 10% rule', routines: [
+  { id: 'nokit', name: 'No equipment', goal: 'home', level: 'Beginner', days: 3, equip: 'None', desc: 'Nothing but floor space. Good for travel or getting started.', routines: [
+    ['Bodyweight A', [['bodyweight_squat', 4, 15, 25], ['push_up', 4, 8, 20], ['glute_bridge', 3, 15, 25], ['plank', 3, 30, 60], ['mountain_climber', 3, 30, 45]]],
+    ['Bodyweight B', [['split_squat', 3, 10, 15], ['pike_push_up', 3, 6, 12], ['nordic_hamstring_curl', 3, 3, 8], ['side_plank', 3, 20, 45], ['burpee', 3, 8, 15]]]] },
+
+  // ---------- Conditioning
+  { id: 'run', name: 'Run base builder', goal: 'conditioning', level: 'Beginner', days: 3, equip: 'None', desc: 'Three runs a week. The coach adds about 10% a week.', routines: [
     ['Easy run', [['running', 1, 0, 0]]], ['Long run', [['running', 1, 0, 0]]], ['Run plus mobility', [['running', 1, 0, 0], ['hip_flexor_stretch', 2, 30, 60], ['pigeon_pose', 2, 30, 60]]]] },
-  { id: 'mob', name: 'Daily mobility', desc: '15 minutes, every day', routines: [
-    ['Mobility flow', [['cat_cow', 2, 10, 10], ['thoracic_rotation', 2, 10, 10], ['deep_squat_hold', 3, 30, 60], ['couch_stretch', 2, 30, 60], ['pigeon_pose', 2, 30, 60], ['downward_dog', 2, 30, 60]]]] }
+  { id: 'hybrid', name: 'Hybrid race prep', goal: 'conditioning', level: 'Intermediate', days: 4, equip: 'Gym', desc: 'Running plus functional stations: sled, wall balls, rower, ski erg.', routines: [
+    ['Stations', [['ski_erg', 1, 0, 0], ['sled_push', 4, 10, 20], ['burpee', 4, 10, 15], ['rowing_machine', 1, 0, 0], ['farmers_walk', 4, 20, 40], ['wall_ball', 4, 15, 25]]],
+    ['Strength for racing', [['squat_barbell', 4, 5, 8], ['romanian_deadlift_barbell', 3, 8, 10], ['walking_lunge_dumbbell', 3, 10, 12], ['pull_up', 3, 6, 12], ['plank', 3, 45, 90]]],
+    ['Intervals', [['interval_session', 6, 60, 90], ['running', 1, 0, 0]]],
+    ['Long run', [['running', 1, 0, 0]]]] },
+  { id: 'kb', name: 'Kettlebell conditioning', goal: 'conditioning', level: 'Beginner', days: 3, equip: 'Kettlebell', desc: 'Swings, get-ups and carries. Strong and fit with one bell.', routines: [
+    ['KB power', [['kettlebell_swing', 5, 15, 20], ['goblet_squat', 4, 8, 12], ['turkish_get_up', 3, 2, 3], ['farmers_walk', 3, 30, 60]]],
+    ['KB endurance', [['kettlebell_swing', 10, 10, 15], ['burpee', 5, 5, 10], ['mountain_climber', 3, 30, 45]]]] },
+
+  // ---------- Sport
+  { id: 'fighter', name: 'Fighter strength and conditioning', goal: 'sport', level: 'Intermediate', days: 2, equip: 'Gym', desc: 'Two sessions to go alongside boxing, MMA or BJJ training.', routines: [
+    ['Fight strength', [['power_clean', 4, 3, 5], ['front_squat_barbell', 3, 5, 8], ['pull_up_weighted', 3, 5, 8], ['push_press', 3, 4, 6], ['pallof_press', 3, 10, 12]]],
+    ['Fight conditioning', [['heavy_bag_rounds', 6, 180, 180], ['battle_ropes', 4, 20, 30], ['assault_bike', 5, 20, 30], ['farmers_walk', 3, 30, 45]]]] },
+  { id: 'climb', name: 'Climber strength', goal: 'sport', level: 'Intermediate', days: 2, equip: 'Hangboard', desc: 'Finger strength, pulling power and core for climbing.', routines: [
+    ['Fingers and pull', [['hangboard_hang', 6, 7, 10], ['pull_up_weighted', 4, 3, 6], ['archer_pull_up', 3, 3, 6], ['hanging_leg_raise', 3, 8, 12]]],
+    ['Antagonist and core', [['push_up', 3, 12, 20], ['overhead_press_barbell', 3, 6, 10], ['wrist_curl_dumbbell', 3, 15, 20], ['tuck_front_lever', 4, 8, 15], ['dragon_flag', 3, 3, 6]]]] },
+
+  // ---------- Mobility
+  { id: 'mob', name: 'Daily mobility', goal: 'mobility', level: 'Beginner', days: 7, equip: 'None', desc: '15 minutes, every day. Hips, spine and shoulders.', routines: [
+    ['Mobility flow', [['cat_cow', 2, 10, 10], ['thoracic_rotation', 2, 10, 10], ['deep_squat_hold', 3, 30, 60], ['couch_stretch', 2, 30, 60], ['pigeon_pose', 2, 30, 60], ['downward_dog', 2, 30, 60]]]] },
+  { id: 'flex', name: 'Splits and flexibility', goal: 'mobility', level: 'Intermediate', days: 3, equip: 'None', desc: 'Work toward the front split and pancake with longer holds.', routines: [
+    ['Flexibility', [['hip_flexor_stretch', 3, 45, 90], ['front_split', 3, 30, 60], ['pancake_stretch', 3, 45, 90], ['jefferson_curl', 3, 8, 10], ['shoulder_dislocates', 2, 10, 15]]]] }
 ];
