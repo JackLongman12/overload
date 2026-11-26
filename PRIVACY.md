@@ -8,9 +8,9 @@ Gym App is a workout tracker. This policy explains what happens to your data.
 **Without an account: nothing.** Gym App has no analytics, ads or tracking.
 
 **With an account (optional):**
-- **Email address:** to identify your account. It isn't used for marketing or shared with anyone.
-- **Encrypted training data:** workouts, routines, measurements, check-ins and progress photos, encrypted on your phone with a key made from your password. The password and key never leave your phone, so the developer and the hosting provider can't read this data.
-- **A login check value** derived from your password (not the password itself), and session tokens.
+- **No email, name or password.** Your account is a random key made on your phone. The server stores only an ID hashed from that key. (Accounts made before version 2.0 store an email address.)
+- **Encrypted training data:** workouts, routines, measurements, check-ins and progress photos, encrypted on your phone with a key made from your account key. The account key never leaves your phone, so the developer and the hosting provider can't read this data.
+- **A login check value** derived from your account key (not the key itself), and session tokens.
 
 ## Where your data is stored
 Your workouts, routines, measurements, check-ins and progress photos are stored only on your device, in the app's private storage.

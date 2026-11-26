@@ -1,6 +1,6 @@
 {
   "repo": "JackLongman12/overload",
-  "apkVersionCode": 6,
-  "apkVersionName": "1.9.0",
-  "notes": "Clear directions for every exercise, program and timer; searchable, grouped exercise lists. 30 new climbing exercises, V/Font and YDS/French grades, climb results and wall angles, grade pyramid, flash grade and finger-strength stats, 3 climbing programs. Sleep from Samsung Health and Sleep as Android fills in the check-in (no double counting). Fixed a stray scrollbar."
+  "apkVersionCode": 7,
+  "apkVersionName": "2.0.0",
+  "notes": "Climbing coach: hangboard edge and grip tracking with protocols and a built-in hang timer, high points for unsent climbs, workload and injury-risk warnings, strength profile vs grade, 16-week climbing plans. New muscle map and better recovery estimates. Sign in with an account key, no email or password. One-tap check-in. Category pages, program pages and no sideways scrolling. Calisthenics 1RM, bodyweight-to-barbell estimates, strength levels and an RPE chart."
 }

@@ -1,6 +1,6 @@
 // Exercise library.
 // type: wr = weight x reps, bw = bodyweight reps, wbw = weighted bodyweight (added load),
-//       dur = timed hold/round, wdur = weight + hold time (max hangs), dist = distance + time, climb = grade + attempts
+//       dur = timed hold/round, wdur = weight + hold time (block lifts), hang = edge + grip + weight + time, dist = distance + time, climb = grade + attempts
 // discipline: strength, calisthenics, cardio, mobility, combat, climbing, conditioning
 'use strict';
 
@@ -201,7 +201,7 @@ const RAW_EXERCISES = [
   ['Bouldering', 'forearms', 'lats,full_body', 'none', 'climb', 'climbing', 0],
   ['Top Rope Climbing', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
   ['Lead Climbing', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
-  ['Hangboard Hang', 'forearms', '', 'other', 'dur', 'climbing', 0],
+  ['Hangboard Hang', 'forearms', '', 'other', 'hang', 'climbing', 0],
   ['Campus Board', 'forearms', 'lats', 'other', 'bw', 'climbing', 0],
   ['Outdoor Bouldering', 'forearms', 'lats,full_body', 'none', 'climb', 'climbing', 0],
   ['Board Climbing', 'forearms', 'lats,full_body', 'none', 'climb', 'climbing', 0],
@@ -212,10 +212,12 @@ const RAW_EXERCISES = [
   ['Auto-belay Laps', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
   ['Deep Water Solo', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
   ['Speed Climbing', 'forearms', 'lats,quads', 'none', 'dur', 'climbing', 0],
-  ['Max Hang (Added Weight)', 'forearms', 'lats', 'other', 'wdur', 'climbing', 0],
-  ['Repeaters (7:3)', 'forearms', '', 'other', 'dur', 'climbing', 0],
-  ['Minimum Edge Hang', 'forearms', '', 'other', 'dur', 'climbing', 0],
-  ['One-arm Hang', 'forearms', 'lats', 'other', 'dur', 'climbing', 0],
+  ['Max Hang (Added Weight)', 'forearms', 'lats', 'other', 'hang', 'climbing', 0],
+  ['Repeaters (7:3)', 'forearms', '', 'other', 'hang', 'climbing', 0],
+  ['Minimum Edge Hang', 'forearms', '', 'other', 'hang', 'climbing', 0],
+  ['One-arm Hang', 'forearms', 'lats', 'other', 'hang', 'climbing', 0],
+  ['Density Hang', 'forearms', '', 'other', 'hang', 'climbing', 0],
+  ['Abrahang', 'forearms', '', 'other', 'hang', 'climbing', 0],
   ['No-hang Block Lift', 'forearms', '', 'other', 'wdur', 'climbing', 0],
   ['Pinch Block Lift', 'forearms', '', 'other', 'wdur', 'climbing', 0],
   ['Campus Ladder', 'forearms', 'lats', 'other', 'bw', 'climbing', 0],

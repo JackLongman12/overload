@@ -26,6 +26,7 @@ const Coach = {
   defaultTarget(ex) {
     if (ex.type === 'dur') return { sets: 3, repMin: 30, repMax: 60 };
     if (ex.type === 'wdur') return { sets: 5, repMin: 7, repMax: 10 };
+    if (ex.type === 'hang') return { ...Climb.protocol(ex).target };
     if (ex.type === 'dist' || ex.type === 'climb') return { sets: 1, repMin: 0, repMax: 0 };
     if (ex.type === 'bw') return { sets: 3, repMin: 8, repMax: 15 };
     return ex.compound ? { sets: 3, repMin: 6, repMax: 10 } : { sets: 3, repMin: 10, repMax: 15 };
@@ -64,6 +65,7 @@ const Coach = {
     else if (ex.type === 'dist') s = this.suggestDistance(ex, t, hist);
     else if (ex.type === 'climb') s = this.suggestClimb(ex, hist);
     else if (ex.type === 'wdur') s = Climb.suggestHold(ex, t, hist);
+    else if (ex.type === 'hang') s = Climb.suggestHang(ex, t, hist);
     else if (ex.type === 'bw') s = this.suggestBodyweight(ex, t, hist);
     else s = this.suggestLoaded(ex, t, hist);
 
@@ -272,24 +274,83 @@ const Coach = {
   },
 
   // Recovery estimate per muscle: 0–100%
-  recovery() {
-    const out = {};
-    const now = Date.now();
-    const recent = Store.data.workouts.filter(w => w.start > now - 4 * 864e5);
+  // How recovered each muscle is (0-100) from the last 4 days of training.
+  // Sets are totalled per muscle per workout; more sets and harder sets take longer.
+  recovery(now = Date.now(), withHours) {
+    const out = {}, left = {};
     Object.keys(MUSCLES).forEach(m => out[m] = 100);
-    for (const w of recent) {
-      const hrs = (now - (w.end || w.start)) / 3600e3;
+    const MAIN = ['chest', 'lats', 'upper_back', 'shoulders', 'biceps', 'triceps', 'forearms', 'abs', 'quads', 'hamstrings', 'glutes', 'calves'];
+    for (const w of Store.data.workouts) {
+      if (w.start < now - 5 * 864e5) continue;
+      const hrs = (now - (w.end || w.start)) / 3600e3, units = {};
+      if (hrs < 0) continue;
+      const add = (m, u) => { if (m === 'full_body') MAIN.forEach(x => units[x] = (units[x] || 0) + u * 0.3); else if (MUSCLES[m] && !['cardio', 'mobility'].includes(m)) units[m] = (units[m] || 0) + u; };
       for (const e of w.exercises) {
         const ex = Store.ex(e.exId);
-        const n = e.sets.filter(s => s.done && s.type !== 'W').length;
-        if (!n) continue;
-        const need = 24 + Math.min(n, 10) * 4.8; // more sets means longer recovery
-        const apply = (m, f) => { const pct = Math.min(100, Math.round(hrs / (need * f) * 100)); out[m] = Math.min(out[m], pct); };
-        apply(ex.muscle, 1); (ex.secondary || []).forEach(m => apply(m, 0.6));
+        if (ex.discipline === 'mobility') continue;
+        const sets = e.sets.filter(s => s.done !== false && s.type !== 'W');
+        // A hard set (RPE 9-10) counts a bit more, an easy one (RPE 6 or less) less
+        const u = sets.reduce((a, s) => a + (+s.rpe >= 9 ? 1.25 : s.rpe && +s.rpe <= 6 ? 0.7 : 1), 0) * (ex.type === 'dist' ? 2 : 1);
+        if (!u) continue;
+        add(ex.muscle, u); (ex.secondary || []).forEach(m => add(m, u * 0.5));
+      }
+      for (const [m, u] of Object.entries(units)) {
+        const need = 18 + Math.min(u, 16) * 4; // 1 set ~ 22 h, 10 sets ~ 58 h, 16+ sets ~ 82 h
+        const pct = Math.min(100, Math.round(hrs / need * 100));
+        if (pct < out[m]) { out[m] = pct; left[m] = Math.max(0, Math.round(need - hrs)); }
       }
     }
-    return out;
+    return withHours ? { pct: out, left } : out;
   }
+};
+
+// ---------- Strength calculators
+const Strength = {
+  // Share of body weight each bodyweight exercise moves (rough figures from biomechanics studies)
+  CALI: { pull_up: ['Pull-up', 1], chin_up: ['Chin-up', 1], chest_dip: ['Dip', 0.95], push_up: ['Push-up', 0.64], pistol_squat: ['Pistol squat (per leg)', 0.85], handstand_push_up: ['Handstand push-up', 0.92], inverted_row: ['Inverted row', 0.55] },
+  // Average of Epley and Brzycki up to 12 reps; Epley alone for high-rep bodyweight sets (up to 30)
+  e1(load, reps) { reps = +reps || 0; if (!load || !reps) return 0; if (reps === 1) return load; if (reps > 12) return load * (1 + Math.min(reps, 30) / 30); return (load * (1 + reps / 30) + load * 36 / (37 - reps)) / 2; },
+  // Calisthenics 1RM: total load moved, the most you could add for a single, and added weight for other rep counts
+  cali(id, bw, added, reps) {
+    const k = (this.CALI[id] || ['', 1])[1], load = bw * k + (+added || 0), one = this.e1(load, reps);
+    const at = r => one / (r > 12 ? 1 + r / 30 : (1 + r / 30 + 36 / (37 - r)) / 2) - bw * k;
+    return { load, one, maxAdded: one - bw * k, table: [1, 3, 5, 8, 10, 12].map(r => ({ r, added: r === 1 ? one - bw * k : at(r) })) };
+  },
+  // Bodyweight strength to barbell estimates (rough ratios; individual leverage and technique vary a lot)
+  predictLifts(id, bw, added, reps) {
+    const c = this.cali(id, bw, added, reps), t = c.one, out = [];
+    if (id === 'pull_up' || id === 'chin_up') out.push(['Lat pulldown', t * 0.95], ['Barbell row', t * 0.72], ['Weighted pull-up (added)', c.maxAdded]);
+    if (id === 'chest_dip') out.push(['Bench press', t / 1.3], ['Weighted dip (added)', c.maxAdded]);
+    if (id === 'push_up') out.push(['Bench press', t * 0.98]);
+    if (id === 'handstand_push_up') out.push(['Overhead press', t * 0.68]);
+    if (id === 'pistol_squat') out.push(['Back squat', t * 1.55]);
+    if (id === 'inverted_row') out.push(['Barbell row', t * 1.2]);
+    return out.map(([n, v]) => [n, Math.max(0, v)]);
+  },
+  // Barbell 1RM to bodyweight reps (the reverse direction)
+  repsFrom(lift, oneRM, bw) {
+    // Reps you could do with a load, from a 1RM (Epley inverted)
+    const reps = load => Math.max(0, Math.round(30 * (oneRM / load - 1)));
+    if (lift === 'bench') return [['Push-ups', reps(bw * 0.64 * 0.98)], ['Dips', reps(bw * 0.95 / 1.3)]];
+    if (lift === 'pulldown') return [['Pull-ups', reps(bw * 0.95)]];
+    if (lift === 'ohp') return [['Handstand push-ups', reps(bw * 0.92 * 0.68)]];
+    return [];
+  },
+  // Strength levels by body-weight ratio (approximate, from common strength-standard tables)
+  LEVELS: ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Elite'],
+  STANDARDS: {
+    m: { squat: [0.75, 1.25, 1.5, 2.0, 2.5], bench: [0.5, 0.75, 1.0, 1.5, 2.0], deadlift: [1.0, 1.5, 2.0, 2.5, 3.0], ohp: [0.35, 0.55, 0.75, 1.0, 1.25] },
+    f: { squat: [0.5, 0.75, 1.0, 1.5, 1.9], bench: [0.25, 0.5, 0.65, 1.0, 1.3], deadlift: [0.5, 1.0, 1.25, 1.75, 2.25], ohp: [0.2, 0.35, 0.5, 0.75, 0.95] }
+  },
+  level(sex, lift, ratio) { const t = this.STANDARDS[sex === 'f' ? 'f' : 'm'][lift]; let i = -1; t.forEach((v, k) => { if (ratio >= v) i = k; }); return { idx: i, name: i < 0 ? 'Getting started' : this.LEVELS[i], next: t[i + 1] || null }; },
+  // DOTS score for a powerlifting total (body weight in kg)
+  dots(totalKg, bwKg, sex) {
+    const c = sex === 'f' ? [-57.96288, 13.6175032, -0.1126655495, 0.0005158568, -0.0000010706] : [-307.75076, 24.0900756, -0.1918759221, 0.0007391293, -0.000001093];
+    const b = Math.min(Math.max(bwKg, 40), 210), den = c[0] + c[1] * b + c[2] * b ** 2 + c[3] * b ** 3 + c[4] * b ** 4;
+    return totalKg * 500 / den;
+  },
+  // % of 1RM for a rep count at an RPE (reps in reserve = 10 - RPE)
+  rpePct(reps, rpe) { const r = reps + (10 - rpe); return r <= 1 ? 1 : 2 / ((1 + r / 30) + 36 / (37 - Math.min(r, 30))); }
 };
 
 function startOfWeek() { const d = new Date(); d.setHours(0, 0, 0, 0); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day); return d.getTime(); }

@@ -202,11 +202,13 @@ const HOWTO = {
   auto_belay_laps: ['Climbs', 'Lap easy routes on auto-belays for endurance. Log each lap\'s grade.', 'Keep moving; aim for a steady pump, not a fail.'],
   deep_water_solo: ['Climbs', 'Climb above deep water without a rope. Log grade and result.', 'Check water depth first.'],
   speed_climbing: ['Climbs', 'Climb the speed route as fast as possible. Log your time in seconds.', 'Track your best time.'],
-  hangboard_hang: ['Fingers', 'Hang from an edge (about 20 mm) with an open or half-crimp grip for the set seconds, then rest 2–3 minutes.', 'Not for your first year of climbing. Stop if fingers hurt.'],
-  max_hang_added_weight: ['Fingers', 'Hang a 20 mm edge for 7–10 s with a belt and weight added (or a pulley taking weight off). Rest 3 minutes. Log the added weight and seconds.', 'When every set holds 10 s, the coach adds weight. Your strongest hang shows as % of body weight.'],
-  repeaters_7_3: ['Fingers', 'Hang 7 seconds, rest 3 seconds, six times in a row = one set (about 60 s). Rest 3 minutes between sets. Log the set time.', 'Builds finger endurance. Use a bigger edge than for max hangs.'],
-  minimum_edge_hang: ['Fingers', 'Hang the smallest edge you can hold for 10 s at body weight. Log seconds.', 'Track the edge size in the notes.'],
-  one_arm_hang: ['Fingers', 'Hang from a jug or edge with one arm for the set seconds, shoulder engaged. Switch arms.', 'Advanced. Use a pulley to take weight off at first.'],
+  hangboard_hang: ['Fingers', 'Hang from an edge with straight arms and engaged shoulders for the set seconds, then rest 2 minutes. Log the edge depth (mm), grip, any added weight and seconds.', 'Most climbers should climb for a year before hangboarding. Stop if fingers hurt.'],
+  max_hang_added_weight: ['Fingers', 'Hang a 20 mm edge in a half crimp for 7–10 s with added weight on a belt (or a pulley taking weight off: log it as a negative number). Pick a load you could hold about 3 s longer. 5 sets, 3 minutes rest. Log edge, grip, weight and seconds.', 'When every set holds 10 s, the coach adds weight or moves you to a smaller edge. Your strongest hang shows as % of body weight.'],
+  repeaters_7_3: ['Fingers', 'Hang 7 s, rest 3 s, six times in a row: that is one set. Rest 3 minutes, do 4–6 sets. Log the total seconds hung in each set (42 = all six hangs).', 'Builds finger endurance for routes. Use the hang timer and a bigger edge than for max hangs.'],
+  minimum_edge_hang: ['Fingers', 'At body weight, hang the smallest edge you can hold for 10 s. When you manage 10 s, next time try an edge 2 mm smaller. Log edge, grip and seconds.', 'An alternative to adding weight if you have a board with many edge sizes.'],
+  one_arm_hang: ['Fingers', 'Hang from an edge with one arm, shoulder engaged and a slight bend in the elbow. Alternate arms. Use a pulley and log the weight it takes off as a negative number.', 'Advanced. The coach reduces the assistance as you get stronger.'],
+  density_hang: ['Fingers', 'Long hangs of 20–40 s on a medium edge at body weight, 4 sets with 2 minutes rest. Log edge, grip and seconds.', 'Good for tendon strength and for climbers new to hangboarding.'],
+  abrahang: ['Fingers', 'Very easy hangs (feet on the ground or a light load, about 40–60% effort): 10 s on, 20 s off for 10–20 minutes.', 'Not a strength workout. Used for finger health and on rest days.'],
   no_hang_block_lift: ['Fingers', 'Grip a block on an edge and lift a weight off the floor for 7–10 s with one hand. Log the weight lifted and seconds.', 'Easier on the shoulders than hanging. Good for beginners.'],
   pinch_block_lift: ['Fingers', 'Pinch a wooden block and lift a weight for the set seconds. Log weight and seconds.', 'Trains thumb and pinch strength.'],
   campus_board: ['Power', 'Climb up the campus rungs using only your arms, feet off. Log moves or ladders as reps.', 'Only for experienced climbers. Warm up fully.'],
@@ -237,7 +239,7 @@ function exGroup(ex) {
 function trackingText(ex) {
   return {
     wr: 'Log weight and reps for each set.', wbw: 'Log added weight (0 for body weight) and reps.', bw: 'Log reps for each set.',
-    dur: 'Log seconds for each set (hold or round).', wdur: 'Log the weight and how many seconds you held.', dist: 'Log distance and time.',
+    dur: 'Log seconds for each set (hold or round).', hang: 'Log edge depth (mm), grip, added weight and seconds for each hang.', wdur: 'Log the weight and how many seconds you held.', dist: 'Log distance and time.',
     climb: 'Log one row per climb: grade, tries, result and wall angle.'
   }[ex.type] || '';
 }
@@ -255,6 +257,6 @@ function targetText(ex, t) {
   const range = (a, b) => (a && b && a !== b ? `${a}–${b}` : `${a || b || ''}`);
   if (ex.type === 'climb') return t.sets > 1 ? `${t.sets} climbs` : 'One row per climb';
   if (ex.type === 'dist') return 'Distance and time';
-  if (ex.type === 'dur' || ex.type === 'wdur') return `${t.sets} × ${range(t.repMin, t.repMax)} s`;
+  if (ex.type === 'dur' || ex.type === 'wdur' || ex.type === 'hang') return `${t.sets} × ${range(t.repMin, t.repMax)} s`;
   return `${t.sets} sets × ${range(t.repMin, t.repMax)} reps`;
 }

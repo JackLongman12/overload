@@ -125,6 +125,39 @@ const Sync = {
     this.run('signup');
     return code;
   },
+  // ---- Account key: no email or password. A random 125-bit key is the only credential.
+  // The server sees an id derived from the key (shaped like an email so the API stays the same).
+  normKey(key) { return String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); },
+  fmtKey(key) { return (this.normKey(key).match(/.{1,5}/g) || []).join('-'); },
+  async keyId(key) {
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', te.encode('gymapp:id:' + this.normKey(key))));
+    return 'k' + [...h.slice(0, 12)].map(b => b.toString(16).padStart(2, '0')).join('') + '@key.gymapp.app';
+  },
+  async deriveFromKey(id, key) {
+    const k = this.normKey(key); // high entropy, so a lower iteration count is plenty
+    const [a, e] = await Promise.all([this.pbkdf2(k, `gymapp:auth:${id}`, 20000), this.pbkdf2(k, `gymapp:enc:${id}`, 20000)]);
+    return { authKey: hexOf(a), encKey: b64(e) };
+  },
+  async keySignup() {
+    const key = this.newRecoveryCode(), id = await this.keyId(key), k = await this.deriveFromKey(id, key);
+    const master = b64(crypto.getRandomValues(new Uint8Array(32)));
+    const r = await this.api('POST', '/signup', { email: id, authKey: k.authKey, wrappedPw: await this.wrap(master, k.encKey) });
+    this.setAcct(id, r.token, master);
+    this.acct.key = this.fmtKey(key); this.acct.keyAccount = true; this.persist();
+    this.run('signup');
+    return this.acct.key;
+  },
+  async keyLogin(key) {
+    if (this.normKey(key).length !== 25) throw new Error('An account key has 25 letters and numbers.');
+    const id = await this.keyId(key), k = await this.deriveFromKey(id, key);
+    let r;
+    try { r = await this.api('POST', '/login', { email: id, authKey: k.authKey }); }
+    catch (e) { throw new Error(/401|wrong/i.test(e.message) ? "That key doesn't match an account. Check it and try again." : e.message); }
+    const master = await this.unwrap(r.wrappedPw, k.encKey);
+    this.setAcct(id, r.token, master);
+    this.acct.key = this.fmtKey(key); this.acct.keyAccount = true; this.persist();
+    await this.run('login');
+  },
   async login(email, password) {
     email = email.trim().toLowerCase();
     const k = await this.derive(email, password);

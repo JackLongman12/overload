@@ -12,10 +12,15 @@ const Timer = {
   build(c) {
     const ph = [];
     if (c.prep) ph.push({ label: 'Get ready', secs: c.prep, kind: 'prep' });
+    const reps = c.reps || 1;
     for (let r = 1; r <= c.rounds; r++) {
       const mv = c.moves && c.moves.length && c.type !== 'amrap' ? c.moves[(r - 1) % c.moves.length] : '';
-      ph.push({ label: c.type === 'emom' ? `Minute ${r}` : c.type === 'amrap' ? 'AMRAP' : `Round ${r} of ${c.rounds}`, secs: c.work, kind: 'work', r, move: mv });
-      if (c.rest && r < c.rounds) ph.push({ label: 'Rest', secs: c.rest, kind: 'rest' });
+      for (let k = 1; k <= reps; k++) {
+        ph.push({ label: c.type === 'emom' ? `Minute ${r}` : c.type === 'amrap' ? 'AMRAP' : reps > 1 ? `Set ${r} of ${c.rounds} · hang ${k} of ${reps}` : `${c.type === 'hang' || c.type === 'maxhang' || c.type === 'abrahang' ? 'Hang' : 'Round'} ${r} of ${c.rounds}`, secs: c.work, kind: 'work', r, move: mv });
+        if (k < reps && c.rest) ph.push({ label: 'Off', secs: c.rest, kind: 'rest' });
+      }
+      const between = reps > 1 ? c.setRest : c.rest;
+      if (between && r < c.rounds) ph.push({ label: 'Rest', secs: between, kind: 'rest' });
     }
     return ph;
   },
@@ -64,10 +69,18 @@ const Timer = {
 Object.assign(UI, {
   beginWorkout(fn) {
     if (Store.data.active) { if (!confirm('You have a workout in progress. Discard it and start a new one?')) return this.openWorkout(); this.discard(); }
-    if (!Store.latestCheckin()) { this._afterCheckin = fn; this.openCheckin(true); } else fn();
+    if (!Store.latestCheckin()) {
+      if (Store.data.settings.autoCheckin) { this.autoCheckin(); return fn(); }
+      this._afterCheckin = fn; this.openCheckin(true);
+    } else fn();
   },
 
   openCheckin(beforeWorkout) {
+    this.prepCheckin(beforeWorkout);
+    this.openSheet('checkin', 'How do you feel?', () => this.checkinBody(beforeWorkout), { onClose: () => { } });
+  },
+  // Fills in everything that can be automatic: sleep, heart data, soreness from training
+  prepCheckin(beforeWorkout) {
     this.ci = { sleep: 7, quality: 3, soreness: 2, energy: 3, stress: 2 };
     this._ciTouched = false; this._ciBefore = beforeWorkout;
     const h = Store.data.health && Date.now() - Store.data.health.at < 6 * 3600e3 ? Store.data.health : null;
@@ -87,19 +100,31 @@ Object.assign(UI, {
       if (HC.on && Date.now() - h.at > 3600e3) HC.pull().then(x => { if (x && this.top() && this.top().key === 'checkin' && !this._ciTouched) this.openCheckin(beforeWorkout); });
     } else if (HC.on) HC.pull().then(x => { if (x && this.top() && this.top().key === 'checkin' && !this._ciTouched) this.openCheckin(beforeWorkout); });
     this._ciFilled = filled;
-    const slider = (k, label, min, max, lo, hi, step = 1) => `<div class="ci"><div class="row-between"><span>${label}</span><b id="ci-${k}">${this.ci[k]}</b></div>
-      <input type="range" min="${min}" max="${max}" step="${step}" value="${this.ci[k]}" data-ci="${k}" aria-label="${label}"><div class="row-between sm muted"><span>${lo}</span><span>${hi}</span></div></div>`;
-    this.openSheet('checkin', 'Readiness check-in', () => `
-      <p class="sm muted">30 seconds. The coach uses this to scale today's sets and weights.</p>
-      ${watchNote ? `<div class="card sm">${icon('device-watch')} Synced: ${esc(watchNote)}. ${filled.length ? `Sleep ${filled.includes('quality') ? 'hours and quality are' : 'hours are'} filled in for you (quality is estimated from your sleep stages). Adjust them if they feel wrong.` : ''} Heart data is already in the score.</div>`
-        : HC.on ? '' : `<div class="sm muted">${icon('moon')} Use Samsung Health, Sleep as Android or a watch? <button class="link sm" data-a="devices">Link Health Connect</button> and sleep fills in by itself.</div>`}
-      ${slider('sleep', 'Sleep (hours)', 3, 10, '3h', '10h', 0.5)}${slider('quality', 'Sleep quality', 1, 5, 'Poor', 'Great')}
-      ${slider('soreness', 'Muscle soreness', 1, 5, 'None', 'Very sore')}${slider('energy', 'Energy', 1, 5, 'Drained', 'Wired')}
-      ${slider('stress', 'Stress', 1, 5, 'Calm', 'High')}
-      <div class="card center"><div class="muted sm">Readiness</div><div class="big" id="ciScore">${readinessScore(this.ci)}</div></div>
-      <button class="btn primary wide" data-a="ciSave">Save${beforeWorkout ? ' and start' : ''}</button>
-      ${beforeWorkout ? '<button class="btn wide ghost" data-a="ciSkip">Skip for today</button>' : ''}`,
-      { onClose: () => { } });
+    // Soreness: estimated from how recovered your trained muscles are
+    const rec = Coach.recovery(), worst = Math.min(100, ...Object.entries(rec).filter(([m]) => !['full_body', 'cardio', 'mobility'].includes(m)).map(([, p]) => p));
+    this.ci.soreness = worst < 40 ? 4 : worst < 60 ? 3 : worst < 85 ? 2 : 1;
+    this.ci.energy = null;
+    const autoNote = worst < 85 ? `Soreness estimated from your recent training (${Object.entries(rec).filter(([m, p]) => p === worst && MUSCLES[m]).map(([m]) => MUSCLES[m]).slice(0, 2).join(', ')} still recovering).` : 'Soreness estimated from your recent training: everything is recovered.';
+    this._ciAutoNote = autoNote; this._ciNote = watchNote; this._ciFilledList = filled;
+  },
+  checkinBody(beforeWorkout) {
+    const c = this.ci, watchNote = this._ciNote, filled = this._ciFilledList || [];
+    const seg = (k, label, opts) => `<div class="ci"><div class="ci-label">${label}</div><div class="seg">${opts.map(([v, l]) => `<button class="seg-btn ${c[k] === v ? 'on' : ''}" data-a="ciSet" data-id="${k}:${v}" aria-pressed="${c[k] === v}">${l}</button>`).join('')}</div></div>`;
+    const moods = [[1, 'mood-sad', 'Drained'], [2, 'mood-sad-2', 'Low'], [3, 'mood-empty', 'OK'], [4, 'mood-smile', 'Good'], [5, 'mood-happy', 'Great']];
+    return `${watchNote ? `<div class="card ci-auto sm">${icon('circle-check')} <b>Filled in for you</b><div>${esc(watchNote)}.</div><div class="muted">${esc(this._ciAutoNote)}</div></div>`
+        : `<div class="card ci-auto sm">${icon('circle-check')} <b>Filled in for you</b><div class="muted">${esc(this._ciAutoNote)}</div>${HC.on ? '' : `<div class="muted">Sleep fills in by itself if you <button class="link sm" data-a="devices">link Health Connect</button> (Samsung Health, Sleep as Android, watches).</div>`}</div>`}
+      <div class="ci-mood-q">One tap: how is your energy today?</div>
+      <div class="moods">${moods.map(([v, ic, l]) => `<button class="mood ${c.energy === v ? 'on' : ''}" data-a="ciMood" data-id="${v}">${icon(ic)}<span>${l}</span></button>`).join('')}</div>
+      <p class="sm muted center">Tapping saves${beforeWorkout ? ' and starts your workout' : ''}. Your readiness score is worked out from everything above.</p>
+      <details class="ci-more" ${this._ciOpen ? 'open' : ''}><summary data-a="ciMore">Adjust the details</summary>
+        ${filled.includes('sleep') ? '' : seg('sleep', 'Sleep last night', [[4, '≤4 h'], [5, '5 h'], [6, '6 h'], [7, '7 h'], [8, '8 h'], [9, '9+ h']])}
+        ${seg('quality', 'Sleep quality' + (filled.includes('quality') ? ' (from your sleep stages)' : ''), [[1, 'Bad'], [2, 'Poor'], [3, 'OK'], [4, 'Good'], [5, 'Great']])}
+        ${seg('soreness', 'Muscle soreness (estimated)', [[1, 'None'], [2, 'Mild'], [3, 'Sore'], [4, 'Very'], [5, 'Painful']])}
+        ${seg('stress', 'Stress', [[1, 'Calm'], [2, 'Low'], [3, 'Some'], [4, 'High'], [5, 'Very']])}
+        ${filled.includes('sleep') ? `<div class="sm muted">Sleep: ${c.sleep} h from your sleep app.</div>` : ''}
+      </details>
+      ${beforeWorkout ? '<button class="btn wide ghost" data-a="ciSkip">Skip for today</button>' : ''}
+      <label class="field row sm"><input type="checkbox" data-setting="autoCheckin" ${Store.data.settings.autoCheckin ? 'checked' : ''}> Don't ask before workouts. Use my sleep and heart data, and assume energy is OK.</label>`;
   },
 
   openWelcome() {
@@ -194,22 +219,31 @@ Object.assign(UI, {
     this.openSheet('account', 'Account and sync', () => {
       const a = Sync.acct;
       if (!a || !a.token) {
-        const mode = this.authMode, up = mode === 'signup', rec = mode === 'recover';
-        return `<div class="card sm">${icon('lock')} <b>End-to-end encrypted.</b> Your password never leaves this phone. Data is encrypted before upload, so the server, and anyone with access to it, can't read your workouts or photos.</div>
-        <div class="chips"><button class="chip ${up ? 'on' : ''}" data-a="authMode" data-id="signup">Create account</button><button class="chip ${mode === 'login' ? 'on' : ''}" data-a="authMode" data-id="login">Log in</button><button class="chip ${rec ? 'on' : ''}" data-a="authMode" data-id="recover">Forgot password</button></div>
-        ${a && !a.token ? `<div class="card warn-card sm">You were signed out on this device. Log in again as ${esc(a.email)}.</div>` : ''}
-        <label class="field">Email<input id="authEmail" type="email" autocomplete="email" value="${esc(a ? a.email : '')}" placeholder="you@example.com"></label>
-        ${rec ? '<label class="field">Recovery key<input id="authCode" autocapitalize="characters" autocomplete="off" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></label>' : ''}
-        <label class="field">${rec ? 'New password' : 'Password'}<input id="authPw" type="password" autocomplete="${up || rec ? 'new-password' : 'current-password'}" placeholder="At least 10 characters"></label>
-        ${up || rec ? `<label class="field">Confirm ${rec ? 'new ' : ''}password<input id="authPw2" type="password" autocomplete="new-password"></label>` : ''}
-        ${this.authErr ? `<div class="sm" style="color:var(--bad);margin-bottom:10px">${esc(this.authErr)}</div>` : ''}
-        <button class="btn primary wide" data-a="authSubmit">${this.authBusy ? 'Working…' : up ? 'Create account and sync' : rec ? 'Reset password and sync' : 'Log in and sync'}</button>
-        ${up ? `<p class="sm muted">After creating your account you'll get a recovery key. It's the only way back in if you forget your password.</p>` : ''}
-        ${rec ? `<p class="sm muted">Your recovery key was shown when you created your account. Without it a forgotten password can't be reset, because only you hold the keys.</p>` : ''}
-        <p class="sm muted">Sync is optional. Without an account everything still works offline on this phone.</p>`;
+        const mode = this.authMode || 'new';
+        if (mode === 'login' || mode === 'recover') {
+          const rec = mode === 'recover';
+          return `<p class="sm muted">For accounts made with an email before version 2.0. New accounts use an account key instead.</p>
+          <label class="field">Email<input id="authEmail" type="email" autocomplete="email" value="${esc(a && !a.keyAccount ? a.email : '')}"></label>
+          ${rec ? '<label class="field">Recovery key<input id="authCode" autocapitalize="characters" autocomplete="off" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></label>' : ''}
+          <label class="field">${rec ? 'New password' : 'Password'}<input id="authPw" type="password" autocomplete="${rec ? 'new-password' : 'current-password'}"></label>
+          ${rec ? '<label class="field">Confirm new password<input id="authPw2" type="password" autocomplete="new-password"></label>' : ''}
+          ${this.authErr ? `<div class="sm err-text">${esc(this.authErr)}</div>` : ''}
+          <button class="btn primary wide" data-a="authSubmit">${this.authBusy ? 'Working…' : rec ? 'Reset password and sync' : 'Log in and sync'}</button>
+          <button class="btn wide ghost" data-a="authMode" data-id="${rec ? 'login' : 'recover'}">${rec ? 'Back to email log in' : 'Forgot password'}</button>
+          <button class="btn wide ghost" data-a="authMode" data-id="new">${icon('arrow-left')} Use an account key</button>`;
+        }
+        return `<div class="card tip-card sm"><b>${icon('shield-lock')} No email, no password</b><p>Your account is a random key made on this phone. Nothing personal is stored on the server, and your data is encrypted before it leaves the phone, so nobody else can read it, even if the server were hacked.</p></div>
+        ${a && !a.token ? `<div class="card warn-card sm">You were signed out on this device. Enter your account key again.</div>` : ''}
+        <button class="btn primary wide big-btn" data-a="keyCreate">${this.authBusy === 'new' ? 'Creating…' : `${icon('key')} Create my account key`}</button>
+        <div class="section-head"><h3>Already have a key?</h3></div>
+        <label class="field">Account key<input id="authKey" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></label>
+        ${this.authErr ? `<div class="sm err-text">${esc(this.authErr)}</div>` : ''}
+        <button class="btn wide" data-a="keyLogin">${this.authBusy === 'key' ? 'Checking…' : `${icon('login')} Log in with key`}</button>
+        <p class="sm muted">Sync is optional. Without an account everything still works offline on this phone.</p>
+        <button class="btn wide ghost" data-a="authMode" data-id="login">I made an account with an email before</button>`;
       }
       const snaps = this.snaps;
-      return `<div class="card"><div class="li static"><span>${icon('user')} ${esc(a.email)}</span></div>
+      return `<div class="card"><div class="li static"><span>${icon(a.keyAccount ? 'key' : 'user')} ${a.keyAccount ? 'Account key …' + esc((a.key || '').slice(-5)) : esc(a.email)}</span>${a.keyAccount && a.key ? '<button class="btn sm" data-a="showKey">Show key</button>' : ''}</div>
         <div class="li static"><span>Status</span><span class="sm ${Sync.state === 'error' ? 'warn' : 'muted'}">${esc(Sync.label())}</span></div>
         ${Sync.err ? `<div class="sm warn" style="padding:0 14px 10px">${esc(Sync.err)}</div>` : ''}</div>
       <button class="btn primary wide" data-a="syncNow">${icon('refresh')} Sync now</button>
@@ -219,11 +253,21 @@ Object.assign(UI, {
       <p class="sm muted">The server keeps a daily snapshot for the last 14 days.</p>
       ${snaps ? (snaps.length ? `<div class="card list">${snaps.map(s => `<div class="li static"><span>${fmtDate(s.created, { weekday: 'short', day: 'numeric', month: 'short' })} ${fmtTime(s.created)}<span class="sm muted"> · ${Math.max(1, Math.round(s.size / 1024))} KB</span></span><button class="btn sm" data-a="restoreSnap" data-id="${s.id}">Restore</button></div>`).join('')}</div>` : '<div class="empty">The first backup appears a day after you start syncing.</div>') : ''}
       <div class="section-head"><h3>Account</h3></div>
-      ${a.hasRecovery ? `<div class="card sm">${icon('key')} Recovery key is set. <button class="link sm" data-a="makeRecovery">Make a new one</button></div>` : `<div class="card warn-card sm"><b>No recovery key yet.</b> Without one, a forgotten password means your cloud copy is lost.<button class="btn sm primary wide" style="margin-top:8px" data-a="makeRecovery">${icon('key')} Create recovery key</button></div>`}
-      <button class="btn wide" data-a="changePwSheet">${icon('lock')} Change password</button>
+      ${a.keyAccount ? '' : a.hasRecovery ? `<div class="card sm">${icon('key')} Recovery key is set. <button class="link sm" data-a="makeRecovery">Make a new one</button></div>` : `<div class="card warn-card sm"><b>No recovery key yet.</b> Without one, a forgotten password means your cloud copy is lost.<button class="btn sm primary wide" style="margin-top:8px" data-a="makeRecovery">${icon('key')} Create recovery key</button></div>`}
+      ${a.keyAccount ? '' : `<button class="btn wide" data-a="changePwSheet">${icon('lock')} Change password</button>`}
       <button class="btn wide" data-a="signOut">${icon('logout')} Sign out</button>
       <button class="btn wide danger-ghost" data-a="deleteAccount">${icon('trash')} Delete account and cloud data</button>`;
     });
+  },
+
+  // The account key is the only way into the account, so make saving it easy
+  showAccountKey(key, isNew) {
+    this.recCode = key;
+    this.openSheet('acctkey', 'Your account key', () => `<div class="celebrate">${icon('key')}<h2>${isNew ? 'Save your account key' : 'Your account key'}</h2></div>
+      <div class="card center"><div class="reccode">${esc(this.recCode)}</div></div>
+      <div class="card warn-card sm">This key is your whole account. Use it to log in on another phone. If you lose the key and this phone, the cloud copy can't be recovered, because there's no email to reset it. Keep it in a password manager or a private note. Anyone with the key can see your training data.</div>
+      <div class="grid2"><button class="btn" data-a="copyRecovery">${icon('copy')} Copy</button><button class="btn" data-a="shareKey">${icon('share')} Save or share</button></div>
+      ${isNew ? `<button class="btn primary wide" data-a="savedKey">I've saved it</button>` : `<button class="btn primary wide" data-a="closeSheet">Done</button>`}`);
   },
 
   showRecoveryCode(code) {
@@ -245,12 +289,12 @@ Object.assign(UI, {
       <div class="card"><b>${icon('calendar-stats')} Training blocks</b><p class="sm muted">5-week cycles: build intensity for 4 weeks, then a planned deload week. Works with any routine or program.</p>
         ${b && !b.done ? `<div class="sm">Current: ${esc(b.name)}, week ${b.week} of ${b.total}. <button class="link sm" data-a="endBlock">End block</button></div>` : `<div class="grid2"><button class="btn sm" data-a="startBlock" data-id="hypertrophy">Muscle block</button><button class="btn sm" data-a="startBlock" data-id="strength">Strength block</button></div>`}</div>
       <p class="sm muted">${PROGRAMS.length} ready-made plans, all free. Adding one creates its routines, and the coach handles progression.</p>
-      <div class="chips scroll-x">${[['all', 'All'], ...Object.entries(PROGRAM_GOALS)].map(([k, v]) => `<button class="chip ${this.progGoal === k ? 'on' : ''}" data-a="progGoal" data-id="${k}">${v}</button>`).join('')}</div>
-      ${list.map(p => `<div class="card"><div class="row-between"><div><b>${esc(p.name)}</b>
+      <div class="chips">${[['all', 'All'], ...Object.entries(PROGRAM_GOALS)].map(([k, v]) => `<button class="chip ${this.progGoal === k ? 'on' : ''}" data-a="progGoal" data-id="${k}">${v}</button>`).join('')}</div>
+      ${list.map(p => `<div class="card prog-card" data-a="programDetail" data-id="${p.id}" role="button" tabindex="0"><div class="row-between"><div><b>${esc(p.name)}</b>
         <div class="chips" style="margin:6px 0 4px"><span class="chip ghost">${p.days} day${p.days > 1 ? 's' : ''}/week</span><span class="chip ghost">${esc(p.level)}</span><span class="chip ghost">${esc(p.equip)}</span></div>
         <div class="sm muted">${esc(p.desc)}</div></div>
-        ${added.has(p.name) ? `<span class="sm acc">${icon('check')} Added</span>` : `<button class="btn sm primary" data-a="addProgram" data-id="${p.id}">Add</button>`}</div>
-        <button class="btn sm wide" style="margin-top:10px" data-a="programDetail" data-id="${p.id}">${icon('list-details')} See the plan and how it works</button></div>`).join('')}`;
+        ${added.has(p.name) ? `<span class="sm acc nowrap">${icon('check')} Added</span>` : icon('chevron-right', 'muted big-chev')}</div>
+        <div class="sm acc" style="margin-top:8px">${icon('list-details')} Tap to see the plan and how it works</div></div>`).join('')}`;
     });
   },
 
@@ -286,13 +330,15 @@ Object.assign(UI, {
     let list = all.filter(e => (st.grp === 'all' || exGroup(e) === st.grp) && (!q || e.name.toLowerCase().includes(q) || exGroup(e).toLowerCase().includes(q) || (MUSCLES[e.muscle] || '').toLowerCase().includes(q)));
     const groups = {};
     list.forEach(e => (groups[exGroup(e)] = groups[exGroup(e)] || []).push(e));
-    const kind = { wr: 'Weight × reps', wbw: 'Added weight × reps', bw: 'Reps', dur: 'Timed', wdur: 'Weight × time', dist: 'Distance', climb: 'Grade' };
+    const kind = { wr: 'Weight × reps', wbw: 'Added weight × reps', bw: 'Reps', dur: 'Timed', hang: 'Edge, grip, load, time', wdur: 'Weight × time', dist: 'Distance', climb: 'Grade' };
     if (!list.length) return '<div class="empty">No matches. Try another word or category.</div>';
+    if (!q && st.grp === 'all' && Object.keys(groups).length > 1 && list.length > 10)
+      return `<div class="tile-grid">${Object.entries(groups).map(([g, items]) => `<button class="card tile-btn" data-a="discGroup" data-id="${esc(g)}"><b>${esc(g)}</b><span class="sm muted">${items.length} · ${esc(items.slice(0, 3).map(e => e.name).join(', '))}</span></button>`).join('')}</div>`;
     return Object.entries(groups).map(([g, items]) => `<div class="section-head"><h3>${esc(g)}</h3><span class="muted sm">${items.length}</span></div>
       <div class="ex-cards">${items.map(e => `<div class="card ex-card">
         <button class="ex-card-main" data-a="exDetail" data-id="${e.id}"><b>${esc(e.name)}</b><span class="sm muted clamp">${esc(howTo(e).steps)}</span>
-          <span class="chips"><span class="chip ghost">${esc(kind[e.type] || '')}</span>${e.muscle !== 'mobility' && e.muscle !== 'cardio' ? `<span class="chip ghost">${esc(MUSCLES[e.muscle] || e.muscle)}</span>` : ''}${e.equipment !== 'none' ? `<span class="chip ghost">${esc(e.equipment)}</span>` : ''}</span></button>
-        <div class="ex-card-btns"><button class="btn sm" data-a="exDetail" data-id="${e.id}">${icon('info-circle')} How to</button><button class="btn sm primary" data-a="quickStart" data-id="${e.id}">${icon('player-play')} Start</button></div></div>`).join('')}</div>`).join('');
+          <span class="sm acc">${esc(kind[e.type] || '')}${e.muscle !== 'mobility' && e.muscle !== 'cardio' ? ' · ' + esc(MUSCLES[e.muscle] || e.muscle) : ''}${e.equipment !== 'none' ? ' · ' + esc(e.equipment) : ''}</span></button>
+        <button class="btn sm primary ex-start" data-a="quickStart" data-id="${e.id}" aria-label="Start ${esc(e.name)}">${icon('player-play')}</button></div>`).join('')}</div>`).join('');
   },
 
   openCustomEx() {
@@ -331,16 +377,54 @@ Object.assign(UI, {
         ${st.trend.length > 1 ? `<div class="card"><b>Hardest send per session</b>${lineChart(st.trend, { label: 'hardest send', fmt: L })}</div>` : ''}
         ${angles.length ? `<div class="card"><b>By wall angle</b><div class="sm muted">Average sent grade. A big gap shows the style to train.</div>${angles.map(([k, l]) => `<div class="li static"><span>${l}</span><span class="sm muted">${st.angles[k].n} sends · avg ${L(st.angles[k].avg)}</span></div>`).join('')}</div>` : ''}`;
     };
-    this.openSheet('climbing', 'Climbing stats', () => {
+    this.openSheet('climbing', 'Climbing coach', () => {
       const f = Climb.fingers(), streak = Climb.fingerDays();
       const body = block('boulder') + block('route');
-      return `<div class="chips">${[[30, '30 days'], [90, '90 days'], [365, '1 year']].map(([n, l]) => `<button class="chip ${days === n ? 'on' : ''}" data-a="climbDays" data-id="${n}">${l}</button>`).join('')}</div>
+      const ph = Climb.phase(), pr = Climb.profile(), lr = Climb.loadRatio(), wl = Climb.weeklyLoad(8);
+      const projs = ['boulder', 'route'].flatMap(c => Climb.projects(c).map(p => ({ ...p, cat: c }))).slice(0, 6);
+      const top = `
+        <div class="card ${ph ? 'accent-card col' : ''}">${ph ? `<b>${icon('calendar-stats')} ${esc(ph.name)} phase · week ${ph.week} of 4</b><div class="sm">${esc(ph.desc)}</div>
+          <div class="phase-bar">${(Climb.PHASES[Climb.plan().focus] || Climb.PHASES.boulder).map((p, k) => `<span class="${k === ph.idx ? 'on' : k < ph.idx ? 'done' : ''}">${esc(p[0])}</span>`).join('')}</div>
+          <div class="grid2"><button class="btn sm" data-a="climbPlan">${icon('adjustments')} Change plan</button><button class="btn sm ghost" data-a="climbPlanEnd">End plan</button></div>`
+          : `<b>${icon('route')} Get a climbing plan</b><div class="sm muted">A 16-week plan in four phases (base, strength, power, perform), built from your focus, days, level and equipment. The coach then adjusts every session to the phase you're in.</div><button class="btn primary wide" data-a="climbPlan">${icon('wand')} Build my climbing plan</button>`}</div>
+        <div class="section-head"><h3>Your profile</h3></div>
+        <div class="stats3"><div class="stat"><div class="muted sm">Level</div><b>${pr.level ? Climb.label(pr.level.v, 'boulder') : '–'}</b></div><div class="stat"><div class="muted sm">Fingers</div><b>${pr.fingerPct ? pr.fingerPct + '%' : '–'}</b></div><div class="stat"><div class="muted sm">Pull-up 1RM</div><b>${pr.pullPct ? pr.pullPct + '%' : '–'}</b></div></div>
+        <div class="card">${pr.advice.map(a => `<div class="insight ${a.tone}">${icon(a.tone === 'warn' ? 'alert-triangle' : a.tone === 'good' ? 'circle-check' : 'bulb')}<span>${esc(a.text)}</span></div>`).join('')}
+          <div class="sm muted" style="padding-top:6px">Fingers and pull-up are % of body weight. Level is your top-5 average. Rough guide from published climber averages, not a precise prediction.</div>
+          <button class="btn sm wide" data-a="quickStart" data-id="max_hang_added_weight">${icon('hand-grab')} Do the finger test</button></div>
+        <div class="section-head"><h3>Workload</h3><span class="muted sm">every attempt counts</span></div>
+        <div class="card">${lineChart(wl, { label: 'weekly climbing load', fmt: Math.round })}
+          ${lr ? `<div class="insight ${lr.ratio > 1.5 ? 'warn' : lr.ratio < 0.7 ? 'info' : 'good'}">${icon(lr.ratio > 1.5 ? 'alert-triangle' : 'activity')}<span>${lr.ratio > 1.5 ? `This week's load is ${lr.ratio}× your 4-week average. Big jumps are when finger injuries happen. Keep the next sessions easy.` : lr.ratio < 0.7 ? `This week is lighter than usual (${lr.ratio}×). Fine for recovery.` : `This week's load is ${lr.ratio}× your average: a safe, steady build.`}</span></div>` : '<div class="sm muted">Log a few weeks to see your load trend and injury-risk warnings.</div>'}
+          <div class="sm muted">Load counts every attempt, weighted by grade and by how far you got (your high point), so hard projects you haven't sent still count.</div></div>
+        ${projs.length ? `<div class="section-head"><h3>Projects</h3></div><div class="card list">${projs.map(p => `<div class="li static"><span><b>${esc(p.g)}</b><span class="sm muted"> · ${p.tries} tries over ${p.sessions} session(s)</span></span><span class="proj-hp"><span style="width:${Math.round(p.best * 100)}%"></span></span></div>`).join('')}<div class="sm muted" style="padding:6px 14px">Bar = your best high point. Log "Fell low / midway / high" when you don't send.</div></div>` : ''}`;
+      return top + `<div class="section-head"><h3>Stats</h3></div><div class="chips">${[[30, '30 days'], [90, '90 days'], [365, '1 year']].map(([n, l]) => `<button class="chip ${days === n ? 'on' : ''}" data-a="climbDays" data-id="${n}">${l}</button>`).join('')}</div>
         ${body || '<div class="empty">Log a climbing session (Bouldering, Lead Climbing, Board Climbing and others) to see your grade pyramid and stats.</div>'}
         <div class="section-head"><h3>Fingers</h3></div>
         <div class="card">${f ? `${f.hang ? `<div class="li static"><span>Strongest hang</span><b>${f.hang.pct}% body weight</b></div><div class="sm muted">${esc(f.hang.name)}: ${f.hang.w ? '+' + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s on ${fmtDate(f.hang.date)}. Around 150% for 10s on a 20 mm edge is typical of V8 / 7c+ climbers.</div>` : ''}
           ${f.lift ? `<div class="li static"><span>Strongest block lift</span><b>${f.lift.pct}% body weight</b></div>` : ''}` : `<div class="sm">Log <b>Max Hang (Added Weight)</b> or a block lift, and set your body weight in Settings, to see finger strength as a % of body weight.</div>`}
           <div class="sm muted" style="padding-top:6px">${streak ? `${streak} day(s) in a row on your fingers. ${streak >= 3 ? 'Take a rest day soon. Pulleys recover slowly.' : ''}` : 'Fingers rested.'}</div></div>`;
     });
+  },
+
+  // Climbing plan builder: big tap targets, one question per row
+  openClimbPlan() {
+    const pl = Climb.plan();
+    const lv = Climb.level(), sessions = Climb.climbSessions();
+    this.cplan = this.cplan || { focus: pl ? pl.focus : 'boulder', days: pl ? pl.days : 3, level: pl ? pl.level : (sessions < 25 ? 'new' : lv && lv.v >= 6 ? 'adv' : 'mid'), hangboard: pl ? pl.hangboard : true };
+    const seg = (k, label, opts) => `<div class="ci"><div class="ci-label">${label}</div><div class="seg">${opts.map(([v, l]) => `<button class="seg-btn ${this.cplan[k] === v ? 'on' : ''}" data-a="cplanSet" data-id="${k}:${v}">${l}</button>`).join('')}</div></div>`;
+    this.openSheet('climbplan', 'Climbing plan', () => {
+      const p = Climb.buildPlan(this.cplan), phases = Climb.PHASES[this.cplan.focus];
+      return `${seg('focus', 'What do you want to get better at?', [['boulder', 'Bouldering'], ['route', 'Routes']])}
+        ${seg('days', 'Climbing or training days per week', [[2, '2'], [3, '3'], [4, '4'], [5, '5']])}
+        ${seg('level', 'Experience', [['new', 'Under 1 year'], ['mid', '1–3 years'], ['adv', '3+ years']])}
+        ${seg('hangboard', 'Do you have a hangboard?', [[true, 'Yes'], [false, 'No']])}
+        ${this.cplan.level === 'new' ? '<div class="card tip-card sm">In your first year, climbing itself is the best training. The plan uses lots of climbing and safe strength work, with no hangboard or campus board.</div>' : ''}
+        <div class="section-head"><h3>16 weeks, 4 phases</h3></div>
+        <div class="card list">${phases.map(([n, d], k) => `<div class="li static col"><b>Weeks ${k * 4 + 1}–${k * 4 + 4}: ${esc(n)}</b><span class="sm muted">${esc(d)}</span></div>`).join('')}</div>
+        <div class="section-head"><h3>Your week</h3></div>
+        ${p.routines.map(([n, list]) => `<div class="card"><b>${esc(n)}</b>${list.map(([id, sets, a, b]) => { const ex = Store.ex(id); return `<div class="li static"><span class="sm">${esc(ex.name)}</span><span class="tag-next nowrap">${esc(targetText(ex, { sets, repMin: a, repMax: b }))}</span></div>`; }).join('')}</div>`).join('')}
+        <div style="height:70px"></div>`;
+    }, { footer: () => `<div class="sheet-foot"><button class="btn primary wide" data-a="cplanSave">${icon('check')} ${pl ? 'Replace my plan' : 'Start this plan'}</button></div>` });
   },
 
   openExDetail(id) {
@@ -354,7 +438,7 @@ Object.assign(UI, {
         <div class="card"><b>Session volume</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.w || 0) * (+s.r || 0), 0) })), { label: 'volume', fmt: Math.round })}</div>`;
     } else if (ex.type === 'bw') charts = `<div class="card"><b>Most reps in a set</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.map(s => +s.r || 0)) })), { label: 'max reps' })}</div><div class="card"><b>Total reps</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.r || 0), 0) })), { label: 'total reps' })}</div>`;
     else if (ex.type === 'wdur') charts = `<div class="card"><b>Heaviest hold (${U()})</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.filter(s => (+s.t || 0) >= 5).map(s => +s.w || 0), 0) })), { label: 'heaviest hold' })}</div>${(() => { const f = Climb.fingers(); return f && f.hang && !Climb.LIFT.includes(ex.id) ? `<div class="card sm">Strongest hang: <b>${f.hang.pct}% of body weight</b> (${f.hang.w ? '+' + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s).</div>` : ''; })()}`;
-    else if (ex.type === 'climb') { const cat = Climb.cat(ex); charts = `<div class="card"><b>Hardest send per session</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(-1, ...h.sets.filter(s => s.sent).map(s => Climb.value(s.g, cat)).filter(v => v != null)) })).filter(p => p.y > -1), { label: 'hardest send', fmt: v => Climb.label(v, cat) })}</div><button class="btn wide" data-a="climbStats">${icon('chart-bar')} Climbing stats: pyramid, flash grade, send rate</button>`; }
+    else if (ex.type === 'climb') { const cat = Climb.cat(ex); charts = `<div class="card"><b>Hardest send per session</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(-1, ...h.sets.filter(s => s.sent).map(s => Climb.value(s.g, cat)).filter(v => v != null)) })).filter(p => p.y > -1), { label: 'hardest send', fmt: v => Climb.label(v, cat) })}</div><button class="btn wide" data-a="climbStats">${icon('mountain')} Climbing coach: plan, profile, pyramid, workload</button>`; }
     else if (ex.type === 'dur') charts = `<div class="card"><b>Longest hold or round (sec)</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.map(s => +s.t || 0)) })), { label: 'longest' })}</div>`;
     else if (ex.type === 'dist') charts = `<div class="card"><b>Distance (km)</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.d || 0), 0) })), { label: 'distance' })}</div>
       <div class="card"><b>Pace (min/km)</b>${lineChart(hist.filter(h => h.sets[0].d).map(h => ({ x: h.date, y: h.sets[0].t / h.sets[0].d / 60 })), { label: 'pace', fmt: v => fmtDur(v * 60) })}</div>`;
@@ -366,7 +450,7 @@ Object.assign(UI, {
       ${(() => { const h = howTo(ex); return `<div class="card howto"><b>${icon('list-check')} How to do it</b><p class="sm">${esc(h.steps)}</p><p class="sm muted">${icon('bulb')} ${esc(h.tip)}</p><p class="sm muted">${icon('pencil')} ${esc(trackingText(ex))}</p></div>`; })()}
       <div class="coach ${sug.kind}"><div class="coach-head">${icon('sparkles')}<b>Coach: ${esc(sug.title)}</b></div><div class="sm">${esc(sug.text)}</div></div>
       <button class="btn primary wide" data-a="quickStart" data-id="${id}">${icon('player-play')} Start a workout with this</button>
-      <div class="card center">${BodyMap.svg({}, 'sets', { primary: ex.muscle, secondary: ex.secondary })}<div class="bm-legend sm muted"><span class="bm-3">■</span> Main <span class="bm-1">■</span> Also works</div></div>
+      <div class="card center">${BodyMap.svg({}, 'sets', { primary: ex.muscle, secondary: ex.secondary })}${BodyMap.legend('exercise')}</div>
       <button class="btn wide" data-a="watchDemo" data-id="${id}">${icon('brand-youtube')} Watch how to do it</button>
       ${(ex.type === 'wr' || ex.type === 'wbw') && hist.length ? `<div class="stats3"><div class="stat"><div class="muted sm">Heaviest</div><b>${fmtW(b.w)}</b></div><div class="stat"><div class="muted sm">Best e1RM</div><b>${Math.round(b.e1)}</b></div><div class="stat"><div class="muted sm">Best set vol.</div><b>${fmtNum(b.vol)}</b></div></div>` : ''}
       ${charts}
@@ -392,7 +476,7 @@ Object.assign(UI, {
 
   openDiscipline(key) {
     const d = DISCIPLINES[key], list = Store.allExercises().filter(e => e.discipline === key);
-    const timers = { combat: ['boxing', 'bjj'], conditioning: ['hiit', 'tabata', 'emom', 'amrap'] }[key] || [];
+    const timers = { combat: ['boxing', 'bjj'], conditioning: ['hiit', 'tabata', 'emom', 'amrap'], climbing: ['maxhang', 'repeaters', 'abrahang'] }[key] || [];
     const extra = {
       cardio: 'Log distance and time. The coach applies the 10% rule for distance and nudges your pace. You can import GPX and TCX files from Strava, Garmin and other trackers.',
       combat: 'Use the round timers, then log rounds. The coach adds rounds over time.',
@@ -404,11 +488,11 @@ Object.assign(UI, {
     }[key];
     this.disc = { q: '', grp: 'all' };
     this.openSheet('disc', d.name, () => `<div class="card tip-card sm"><b>${icon(d.icon)} How ${esc(d.name.toLowerCase())} works here</b><p>${extra}</p><p class="muted">Tap any exercise to see how to do it. Tap Start to begin a workout with it.</p></div>
-      ${key === 'climbing' ? `<button class="btn wide" data-a="climbStats">${icon('chart-bar')} Climbing stats</button>` : ''}
+      ${key === 'climbing' ? `<button class="btn wide" data-a="climbStats">${icon('mountain')} Climbing coach: plan, profile and stats</button>` : ''}
       ${timers.length ? `<div class="section-head"><h3>Timers</h3></div><div class="timer-tiles">${timers.map(t => `<button class="card timer-tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<span><b>${TIMER_PRESETS[t].name}</b><span class="sm muted">${esc(TIMER_PRESETS[t].about)}</span></span></button>`).join('')}</div>` : ''}
       <div class="section-head"><h3>Exercises</h3></div>
       <input class="search" type="search" data-f="discq" placeholder="Search ${list.length} exercises" value="${esc(this.disc.q)}" aria-label="Search exercises">
-      <div class="chips scroll-x">${['all', ...new Set(list.map(exGroup))].map(g => `<button class="chip ${this.disc.grp === g ? 'on' : ''}" data-a="discGroup" data-id="${esc(g)}">${g === 'all' ? 'All' : esc(g)}</button>`).join('')}</div>
+      <div class="chips">${['all', ...new Set(list.map(exGroup))].map(g => `<button class="chip ${this.disc.grp === g ? 'on' : ''}" data-a="discGroup" data-id="${esc(g)}">${g === 'all' ? 'All' : esc(g)}</button>`).join('')}</div>
       <div id="discList">${this.discList(key)}</div>`);
     this.top().discKey = key;
   },
@@ -423,14 +507,15 @@ Object.assign(UI, {
 
   openTimerSetup(type) {
     const p = TIMER_PRESETS[type];
-    this.tconf = { type, name: p.name, work: p.work, rest: p.rest, rounds: p.rounds, prep: 10, moves: (p.moves || []).slice() };
+    this.tconf = { type, name: p.name, work: p.work, rest: p.rest, rounds: p.rounds, prep: 10, moves: (p.moves || []).slice(), reps: p.reps || 1, setRest: p.setRest || 0 };
     const f = (k, label, unit) => `<label class="field">${label}<div class="row"><input inputmode="numeric" data-tc="${k}" value="${this.tconf[k]}"><span class="muted sm">${unit}</span></div></label>`;
     this.openSheet('tsetup', p.name + ' timer', () => `
       <div class="card tip-card sm"><b>${icon(p.icon)} What is ${esc(p.name)}?</b><p>${esc(p.about)}</p><b>How to do it</b><ol>${p.how.map(x => `<li>${esc(x)}</li>`).join('')}</ol></div>
       ${type === 'bjj' ? '' : `<label class="field">${type === 'amrap' ? 'Circuit' : type === 'emom' ? 'Each minute' : 'Moves'} <span class="muted sm">(one per line${type === 'amrap' ? '' : ', rotates each round'})</span><textarea data-tc="moves" rows="${Math.max(3, this.tconf.moves.length)}">${esc(this.tconf.moves.join('\n'))}</textarea></label>`}
       ${type === 'amrap' ? f('work', 'Time cap', 'seconds') : f('work', type === 'emom' ? 'Interval' : 'Work', 'seconds')}
-      ${type === 'amrap' || type === 'emom' ? '' : f('rest', 'Rest', 'seconds')}
-      ${type === 'amrap' ? '' : f('rounds', type === 'emom' ? 'Minutes' : 'Rounds', '')}
+      ${type === 'amrap' || type === 'emom' ? '' : f('rest', p.reps ? 'Off between hangs' : 'Rest', 'seconds')}
+      ${p.reps ? f('reps', 'Hangs per set', '') + f('setRest', 'Rest between sets', 'seconds') : ''}
+      ${type === 'amrap' ? '' : f('rounds', type === 'emom' ? 'Minutes' : p.reps ? 'Sets' : 'Rounds', '')}
       ${f('prep', 'Get-ready countdown', 'seconds')}
       <div class="card sm" id="tcSum">${timerSummary(this.tconf)}</div>
       <button class="btn primary wide" data-a="timerStart">${icon('player-play')} Start</button>`);
@@ -442,6 +527,8 @@ Object.assign(UI, {
     this.stack = this.stack.filter(s => s.key !== 'tsetup');
     this.openSheet('timer', esc(c.name), () => {
       const T = Timer, ph = T.phases[Math.min(T.i, T.phases.length - 1)];
+      if (T.finished && T.conf.type === 'hang') return `<div class="celebrate">${icon('trophy')}<h2>Hangs done</h2><div class="muted">${timerSummary(T.conf)}</div></div>
+        <button class="btn primary wide" data-a="hangDone">${icon('check')} Mark the sets done</button><button class="btn wide" data-a="closeSheet">Back to the workout</button>`;
       if (T.finished) return `<div class="celebrate">${icon('trophy')}<h2>Done</h2><div class="muted">${timerSummary(T.conf)}</div></div>
         ${T.conf.type === 'amrap' ? `<div class="center big">${T.amrapRounds} rounds</div>` : ''}
         <button class="btn primary wide" data-a="timerSave">${icon('device-floppy')} Save to history</button><button class="btn wide" data-a="closeSheet">Close without saving</button>`;
@@ -459,13 +546,23 @@ Object.assign(UI, {
 
   openTool(id) {
     const s = Store.data.settings;
-    this.toolState = { target: '100', bar: String(s.bar), w: '100', r: '5' };
-    const titles = { plates: 'Plate calculator', warmup: 'Warm-up calculator', onerm: '1RM calculator' };
+    const best = id => { const b = bestOf(id); return b.e1 ? String(Math.round(b.e1)) : ''; };
+    this.toolState = { target: '100', bar: String(s.bar), w: '100', r: '5', ex: 'pull_up', bw: String(s.bodyweight || 75), add: '0', reps: '8', sex: s.sex || 'm',
+      squat: best('squat_barbell'), bench: best('bench_press_barbell'), deadlift: best('deadlift_barbell'), ohp: best('overhead_press_barbell'), lift: 'bench', one: best('bench_press_barbell') || '80', rpe: '8' };
+    const titles = { plates: 'Plate calculator', warmup: 'Warm-up calculator', onerm: '1RM calculator', cali: 'Calisthenics 1RM', convert: 'Bodyweight ↔ barbell', standards: 'Strength level', rpe: 'RPE chart' };
+    const inp = (k, label, mode = 'decimal') => `<label class="field">${label}<input inputmode="${mode}" data-tool="${k}" value="${esc(this.toolState[k])}"></label>`;
+    const sel = (k, label, opts) => `<label class="field">${label}<select data-tool="${k}">${opts.map(([v, l]) => `<option value="${v}" ${this.toolState[k] === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+    const caliOpts = Object.entries(Strength.CALI).map(([k, v]) => [k, v[0]]);
     this.toolId = id;
     this.openSheet('tool', titles[id], () => `
       ${id === 'plates' ? `<label class="field">Target weight (${U()})<input inputmode="decimal" data-tool="target" value="${this.toolState.target}"></label><label class="field">Bar (${U()})<input inputmode="decimal" data-tool="bar" value="${this.toolState.bar}"></label>` : ''}
       ${id === 'warmup' ? `<label class="field">Working weight (${U()})<input inputmode="decimal" data-tool="target" value="${this.toolState.target}"></label>` : ''}
       ${id === 'onerm' ? `<div class="grid2"><label class="field">Weight<input inputmode="decimal" data-tool="w" value="${this.toolState.w}"></label><label class="field">Reps<input inputmode="numeric" data-tool="r" value="${this.toolState.r}"></label></div>` : ''}
+      ${id === 'cali' ? `${sel('ex', 'Exercise', caliOpts)}<div class="grid3">${inp('bw', 'Body weight (' + U() + ')')}${inp('add', 'Added (' + U() + ')')}${inp('reps', 'Reps', 'numeric')}</div><p class="sm muted">Added weight: a belt or vest. Use a negative number for band or machine assistance.</p>` : ''}
+      ${id === 'convert' ? `<div class="card tip-card sm">Rough estimates. Leverage, technique and training history change these a lot, so use them as a starting point, not a test result.</div>
+        <div class="section-head"><h3>From bodyweight to barbell</h3></div>${sel('ex', 'Exercise', caliOpts)}<div class="grid3">${inp('bw', 'Body weight (' + U() + ')')}${inp('add', 'Added (' + U() + ')')}${inp('reps', 'Reps', 'numeric')}</div>` : ''}
+      ${id === 'standards' ? `<div class="grid2">${sel('sex', 'Standards for', [['m', 'Men'], ['f', 'Women']])}${inp('bw', 'Body weight (' + U() + ')')}</div><div class="grid2">${inp('squat', 'Squat 1RM')}${inp('bench', 'Bench 1RM')}${inp('deadlift', 'Deadlift 1RM')}${inp('ohp', 'Overhead press 1RM')}</div><p class="sm muted">Filled in from your best estimated 1RMs. Change them to try other numbers.</p>` : ''}
+      ${id === 'rpe' ? `<div class="grid2">${inp('one', '1RM (' + U() + ')')}${sel('rpe', 'Target RPE', [['10', '10 (max)'], ['9.5', '9.5'], ['9', '9 (1 left)'], ['8.5', '8.5'], ['8', '8 (2 left)'], ['7.5', '7.5'], ['7', '7 (3 left)'], ['6', '6 (4 left)']])}</div>` : ''}
       <div id="toolOut">${this.toolOut()}</div>
       ${id === 'plates' ? `<p class="sm muted">Available plates: ${s.plates.join(', ')} ${U()}. Change them in Settings.</p>` : ''}`);
   },
@@ -483,6 +580,33 @@ Object.assign(UI, {
     if (this.toolId === 'warmup') {
       const w = num(t.target); if (!w) return '';
       return `<div class="card list">${warmupSets(w).map((x, i) => `<div class="li static"><span>Warm-up ${i + 1}</span><b>${fmtW(x.w)} ${U()} × ${x.r}</b></div>`).join('')}<div class="li static"><span>Working sets</span><b>${fmtW(w)} ${U()}</b></div></div>`;
+    }
+    const kg = Store.data.settings.unit === 'lb' ? 0.45359237 : 1, W = v => `${fmtW(Coach.roundW(v))} ${U()}`;
+    if (this.toolId === 'cali' || this.toolId === 'convert') {
+      const bw = num(t.bw), reps = num(t.reps); if (!bw || !reps) return '<div class="sm muted">Enter body weight and reps.</div>';
+      const c = Strength.cali(t.ex, bw, num(t.add), reps), name = Strength.CALI[t.ex][0];
+      if (this.toolId === 'cali') return `<div class="card center"><div class="muted sm">Estimated 1-rep max for ${esc(name.toLowerCase())}</div>
+          <div class="big">${c.maxAdded >= 0 ? '+' + W(c.maxAdded) : W(c.maxAdded)}</div><div class="sm muted">${c.maxAdded >= 0 ? 'added weight for a single rep' : 'assistance needed for a single rep'} · total load ${W(c.one)}</div></div>
+        <div class="card list">${c.table.map(x => `<div class="li static"><span>${x.r} rep${x.r > 1 ? 's' : ''}</span><b>${x.added >= 0 ? '+' + W(x.added) : W(x.added) + ' (assisted)'}</b></div>`).join('')}</div>
+        <p class="sm muted">Total load counts the share of your body weight the exercise moves (${Math.round(Strength.CALI[t.ex][1] * 100)}% for ${esc(name.toLowerCase())}).</p>`;
+      const pl = Strength.predictLifts(t.ex, bw, num(t.add), reps);
+      const back = [['bench', 'Bench press'], ['pulldown', 'Lat pulldown'], ['ohp', 'Overhead press']].map(([k, n]) => { const one = k === 'bench' ? num(t.bench) : k === 'ohp' ? num(t.ohp) : 0; return one ? Strength.repsFrom(k, one, bw).map(([x, r]) => `<div class="li static"><span>${n} ${W(one)} → ${x}</span><b>about ${r} reps</b></div>`).join('') : ''; }).join('');
+      return `<div class="card list">${pl.map(([n, v]) => `<div class="li static"><span>${esc(n)}</span><b>~${W(v)}</b></div>`).join('') || '<div class="li static">No barbell match for this exercise.</div>'}</div>
+        ${back ? `<div class="section-head"><h3>From your barbell lifts</h3></div><div class="card list">${back}</div>` : ''}`;
+    }
+    if (this.toolId === 'standards') {
+      const bw = num(t.bw); if (!bw) return '';
+      const rows = [['squat', 'Squat'], ['bench', 'Bench press'], ['deadlift', 'Deadlift'], ['ohp', 'Overhead press']].map(([k, n]) => { const v = num(t[k]); if (!v) return ''; const r = v / bw, L = Strength.level(t.sex, k, r);
+        return `<div class="li static col"><div class="row-between" style="width:100%"><span><b>${n}</b> <span class="sm muted">${r.toFixed(2)}× body weight</span></span><span class="tag-next">${L.name}</span></div><div class="lvl-bar">${Strength.LEVELS.map((x, i) => `<span class="${i <= L.idx ? 'on' : ''}"></span>`).join('')}</div>${L.next ? `<span class="sm muted">Next level at ${W(L.next * bw)}</span>` : ''}</div>`; }).join('');
+      const total = num(t.squat) + num(t.bench) + num(t.deadlift), dots = total && num(t.squat) && num(t.bench) && num(t.deadlift) ? Strength.dots(total * kg, bw * kg, t.sex) : 0;
+      return `<div class="card list">${rows || '<div class="li static">Enter at least one lift.</div>'}</div>
+        ${dots ? `<div class="card center"><div class="muted sm">DOTS score (squat + bench + deadlift)</div><div class="big">${Math.round(dots)}</div><div class="sm muted">Compares strength across body weights. Around 300 is a solid gym lifter, 400+ is competitive.</div></div>` : ''}
+        <p class="sm muted">Levels are approximate, based on common strength-standard tables.</p>`;
+    }
+    if (this.toolId === 'rpe') {
+      const one = num(t.one), rpe = num(t.rpe); if (!one) return '';
+      return `<div class="card list">${[1, 2, 3, 4, 5, 6, 8, 10, 12].map(r => { const p = Strength.rpePct(r, rpe); return `<div class="li static"><span>${r} rep${r > 1 ? 's' : ''} @ RPE ${rpe}</span><b>${W(one * p)} <span class="sm muted">${Math.round(p * 100)}%</span></b></div>`; }).join('')}</div>
+        <p class="sm muted">RPE 8 means you could have done 2 more reps. Weights are rounded to what you can load.</p>`;
     }
     const w = num(t.w), r = num(t.r); if (!w || !r) return '';
     const epley = Coach.e1rm(w, r), brz = r < 37 ? w * 36 / (37 - r) : epley, e = (epley + brz) / 2;

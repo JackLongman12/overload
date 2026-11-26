@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const FILES = ['util', 'exercises', 'climbing', 'howto', 'store', 'sync', 'device', 'pose', 'extras', 'coach', 'planning', 'importers', 'updatekey', 'updater', 'app', 'actions', 'views'];
+const FILES = ['util', 'exercises', 'climbing', 'howto', 'store', 'sync', 'device', 'pose', 'vendor/bodymap-art', 'extras', 'coach', 'planning', 'importers', 'updatekey', 'updater', 'app', 'actions', 'views'];
 const EXPORTS = ['Store', 'Photos', 'Sync', 'Coach', 'IO', 'BLE', 'HC', 'Pose', 'LM', 'UI', 'Actions', 'Timer', 'Updater', 'BUILTIN_EXERCISES', 'PROGRAMS', 'LADDERS',
-  'warmupSets', 'readinessScore', 'convertUnits', 'findPRs', 'routineGroups', 'workoutVolume', 'uid', 'parseDur', 'fmtDur', 'ErrorLog', 'Plan', 'EQUIPMENT', 'Achievements', 'BodyMap', 'Climb', 'GRADE_SYSTEMS', 'HOWTO'];
+  'warmupSets', 'readinessScore', 'convertUnits', 'findPRs', 'routineGroups', 'workoutVolume', 'uid', 'parseDur', 'fmtDur', 'ErrorLog', 'Plan', 'EQUIPMENT', 'Achievements', 'BodyMap', 'Climb', 'GRADE_SYSTEMS', 'HOWTO', 'Strength', 'BODY_ART'];
 
 function load() {
   const storage = new Map();
@@ -24,7 +24,7 @@ function load() {
   ctx.window = ctx;
   vm.createContext(ctx);
   const src = FILES.map(f => {
-    const p = path.join(__dirname, '..', 'www', 'js', f + '.js');
+    const p = f.startsWith('vendor/') ? path.join(__dirname, '..', 'www', f + '.js') : path.join(__dirname, '..', 'www', 'js', f + '.js');
     return fs.existsSync(p) ? fs.readFileSync(p, 'utf8').replace(/^'use strict';/m, '') : '';
   }).join('\n;\n');
   const api = vm.runInContext(src + `\n;({${EXPORTS.map(n => `${n}: typeof ${n} !== 'undefined' ? ${n} : undefined`).join(',')}})`, ctx, { filename: 'app-bundle.js' });

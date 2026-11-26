@@ -138,8 +138,7 @@ const UI = {
       <div class="stat"><div class="muted sm">Time</div><b>${fmtDur(wk.reduce((s, w) => s + ((w.end || w.start) - w.start) / 1000, 0)).replace(/:\d\d$/, '')}<span class="muted sm"> h</span></b></div>
     </div>
     <div class="section-head"><h3>Muscle recovery</h3><span class="muted sm">estimated</span></div>
-    <div class="card">${BodyMap.svg(rec, 'recovery')}<div class="bm-legend sm muted"><span class="bm-0">■</span> Fresh <span class="bm-2">■</span> Recovering <span class="bm-3">■</span> Fatigued</div>
-    ${recList.filter(([, p]) => p < 90).length ? `<div class="chips" style="margin-top:8px">${recList.filter(([, p]) => p < 90).map(([m, p]) => `<span class="chip rec ${p >= 50 ? 'mid' : 'low'}">${MUSCLES[m]} ${p}%</span>`).join('')}</div>` : '<div class="sm muted center">Everything is recovered. Good day for a big session.</div>'}</div>
+    <div class="card">${BodyMap.svg(rec, 'recovery')}${BodyMap.legend('recovery')}${recoveryList()}</div>
     <div style="height:20px"></div>`;
   },
 
@@ -162,6 +161,10 @@ const UI = {
       <button class="card tile" data-a="tool" data-id="plates">${icon('circle-dot')}<b>Plates</b></button>
       <button class="card tile" data-a="tool" data-id="warmup">${icon('temperature')}<b>Warm-up</b></button>
       <button class="card tile" data-a="tool" data-id="onerm">${icon('calculator')}<b>1RM</b></button>
+      <button class="card tile" data-a="tool" data-id="cali">${icon('stretching')}<b>Calisthenics 1RM</b></button>
+      <button class="card tile" data-a="tool" data-id="convert">${icon('arrows-exchange')}<b>Bodyweight ↔ barbell</b></button>
+      <button class="card tile" data-a="tool" data-id="standards">${icon('trophy')}<b>Strength level</b></button>
+      <button class="card tile" data-a="tool" data-id="rpe">${icon('gauge')}<b>RPE chart</b></button>
     </div><div style="height:20px"></div>`;
   },
 
@@ -191,11 +194,11 @@ const UI = {
     <div class="card"><div class="row-between"><b>Weekly volume</b><span class="muted sm">${U()}</span></div>${barChart(weeks, { label: 'weekly volume', fmt: fmtNum })}</div>
     <div class="card"><div class="row-between"><b>${this._mapMode === 'recovery' ? 'Recovery right now' : 'Muscles trained this week'}</b><button class="link sm" data-a="mapMode">${this._mapMode === 'recovery' ? 'Show sets' : 'Show recovery'}</button></div>
       ${this._mapMode === 'recovery' ? BodyMap.svg(Coach.recovery(), 'recovery') : BodyMap.svg(Coach.weeklySets(), 'sets')}
-      <div class="bm-legend sm muted">${this._mapMode === 'recovery' ? '<span class="bm-0">■</span> Fresh <span class="bm-2">■</span> Recovering <span class="bm-3">■</span> Fatigued' : '<span class="bm-1">■</span> 1–5 sets <span class="bm-2">■</span> 6–11 <span class="bm-3">■</span> 12+'}</div></div>
+      ${BodyMap.legend(this._mapMode === 'recovery' ? 'recovery' : 'sets')}${this._mapMode === 'recovery' ? recoveryList() : ''}</div>
     <div class="card"><b>Consistency</b>${heatmap(ws)}</div>
     <div class="card"><b>Sets per muscle, last 30 days</b>
       ${mList.length ? mList.map(([m, v]) => `<div class="hbar"><span>${MUSCLES[m] || m}</span><div><div style="width:${v / mMax * 100}%"></div></div><span>${v}</span></div>`).join('') : '<div class="empty-chart">No data yet</div>'}</div>
-    ${Climb.climbs(365).length ? (() => { const b = Climb.stats('boulder', 90), r = Climb.stats('route', 90); return `<button class="card accent-card" data-a="climbStats">${icon('mountain')}<div><b>Climbing stats</b><div class="sm">${[b && b.max != null ? 'Boulder ' + Climb.label(b.max, 'boulder') : '', r && r.max != null ? 'Route ' + Climb.label(r.max, 'route') : ''].filter(Boolean).join(' · ') || 'Grade pyramid, flash grade, send rate'}</div></div></button>`; })() : ''}
+    ${Climb.climbs(365).length ? (() => { const b = Climb.stats('boulder', 90), r = Climb.stats('route', 90); return `<button class="card accent-card" data-a="climbStats">${icon('mountain')}<div><b>Climbing coach</b><div class="sm">${[b && b.max != null ? 'Boulder ' + Climb.label(b.max, 'boulder') : '', r && r.max != null ? 'Route ' + Climb.label(r.max, 'route') : ''].filter(Boolean).join(' · ') || 'Grade pyramid, flash grade, send rate'}</div></div></button>`; })() : ''}
     <div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
     ${prs.length ? `<div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : '<div class="empty">Personal records show up here.</div>'}
     <div class="section-head"><h3>${icon('award')} Achievements</h3><span class="muted sm">${Achievements.unlocked().size} of ${Achievements.LIST.length}</span></div>
@@ -252,7 +255,8 @@ const UI = {
     if ((ex.type === 'wr') && ex.compound && Store.data.settings.warmups !== false && sug.sets && sug.sets[0] && +sug.sets[0].w >= Store.data.settings.bar * 1.8) {
       warmupSets(+sug.sets[0].w).slice(0, 3).reverse().forEach(ws => sets.unshift({ type: 'W', w: '', r: '', rpe: '', done: false, p: ws }));
     }
-    return { exId, target: t, rest: rest || (ex.type === 'dist' ? 0 : Store.data.settings.rest), notes: '', ss: false, sets };
+    const P = ex.type === 'hang' ? Climb.protocol(ex).timer : null;
+    return { exId, target: t, rest: rest || (ex.type === 'dist' ? 0 : P ? (P.setRest || P.rest) : ex.type === 'climb' ? 180 : Store.data.settings.rest), notes: '', ss: false, sets };
   },
 
   openWorkout() {
@@ -286,7 +290,7 @@ const UI = {
     const rows = e.sets.map((s, j) => {
       const label = s.type === 'N' ? ++n : s.type;
       const pv = prev.filter(x => x.type === s.type)[s.type === 'N' ? n - 1 : 0];
-      return `<div class="set-row ${s.done ? 'done' : ''} cols-${cols.length}">
+      return `<div class="set-row ${s.done ? 'done' : ''} cols-${cols.length} ty-${ex.type}">
         <button class="set-type t-${s.type}" data-a="cycleType" data-i="${i}" data-j="${j}" aria-label="Set type">${label}</button>
         <span class="prev">${pv ? prevText(ex, pv) : '–'}</span>
         ${cols.map(c => setInput(ex, c, s, i, j)).join('')}
@@ -297,7 +301,7 @@ const UI = {
       <div class="row-between"><button class="ex-title" data-a="exDetail" data-id="${e.exId}">${esc(ex.name)}</button>
         <button class="icon-btn" data-a="exMenu" data-i="${i}" aria-label="Exercise options">${icon('dots-vertical')}</button></div>
       ${inSS ? `<div class="ss-tag sm">${icon('link')} Superset</div>` : ''}
-      <div class="ex-target sm"><span>${icon('target')} ${esc(targetText(ex, e.target || Coach.defaultTarget(ex)))}${ex.type !== 'dist' && +e.rest ? ` · rest ${fmtDur(e.rest)}` : ''}</span><button class="link sm" data-a="toggleHow" data-i="${i}" aria-expanded="${!!e.showHow}">${icon('info-circle')} ${e.showHow ? 'Hide' : 'How to'}</button></div>
+      <div class="ex-target sm"><span>${icon('target')} ${esc(targetText(ex, e.target || Coach.defaultTarget(ex)))}${ex.type !== 'dist' && +e.rest ? ` · rest ${fmtDur(e.rest)}` : ''}</span>${ex.type === 'hang' ? `<button class="link sm" data-a="hangTimer" data-i="${i}">${icon('clock-play')} Timer</button>` : ''}<button class="link sm" data-a="toggleHow" data-i="${i}" aria-expanded="${!!e.showHow}">${icon('info-circle')} ${e.showHow ? 'Hide' : 'How to'}</button></div>
       ${e.showHow ? (() => { const h = howTo(ex); return `<div class="howto sm"><p>${esc(h.steps)}</p><p class="muted">${icon('bulb')} ${esc(h.tip)}</p><p class="muted">${esc(trackingText(ex))}</p></div>`; })() : ''}
       ${e.showNotes || e.notes ? `<textarea class="notes" data-f="enotes" data-i="${i}" placeholder="Notes: seat height, grip, cues">${esc(e.notes)}</textarea>` : ''}
       <div class="coach ${sug.kind}">
@@ -306,7 +310,7 @@ const UI = {
         <div class="coach-btns">${sug.sets && sug.sets.length && sug.kind !== 'new' ? `<button class="btn sm" data-a="applySug" data-i="${i}">${icon('wand')} Apply</button>` : ''}
         ${sug.nextEx ? `<button class="btn sm" data-a="swapEx" data-i="${i}" data-id="${sug.nextEx}">${icon('arrow-up-right')} Switch to ${esc(Store.ex(sug.nextEx).name)}</button>` : ''}</div>
       </div>
-      <div class="set-row head cols-${cols.length}"><span>Set</span><span>Previous</span>${cols.map(c => `<span>${colLabel(c, ex)}</span>`).join('')}<span>${icon('check')}</span></div>
+      <div class="set-row head cols-${cols.length} ty-${ex.type}"><span>Set</span><span>Previous</span>${cols.map(c => `<span>${colLabel(c, ex)}</span>`).join('')}<span>${icon('check')}</span></div>
       ${rows}
       <div class="row-between ex-foot">
         <button class="btn sm" data-a="addSet" data-i="${i}">${icon('plus')} Set</button>
@@ -383,8 +387,8 @@ const UI = {
     this.openSheet('picker', 'Add exercises', () => `
       <input class="search" type="search" placeholder="Search 180+ exercises" data-f="pickq" value="${esc(this.pick.q)}" aria-label="Search exercises">
       ${Store.data.settings.gym && Store.data.settings.gym.length ? `<label class="field row sm"><input type="checkbox" data-a-change="pickGym" ${this.pick.gymOnly ? 'checked' : ''}> Only equipment at my gym</label>` : ''}
-      <div class="chips scroll-x">${['all', ...Object.keys(DISCIPLINES)].map(k => `<button class="chip ${this.pick.disc === k ? 'on' : ''}" data-a="pickDisc" data-id="${k}">${k === 'all' ? 'All' : DISCIPLINES[k].name}</button>`).join('')}</div>
-      <div class="chips scroll-x">${['all', ...Object.keys(MUSCLES)].map(k => `<button class="chip ${this.pick.muscle === k ? 'on' : ''}" data-a="pickMuscle" data-id="${k}">${k === 'all' ? 'Any muscle' : MUSCLES[k]}</button>`).join('')}</div>
+      <div class="grid2 filters"><label class="field">Category<select data-f="pickdisc">${['all', ...Object.keys(DISCIPLINES)].map(k => `<option value="${k}" ${this.pick.disc === k ? 'selected' : ''}>${k === 'all' ? 'All categories' : DISCIPLINES[k].name}</option>`).join('')}</select></label>
+        <label class="field">Muscle<select data-f="pickmus">${['all', ...Object.keys(MUSCLES)].map(k => `<option value="${k}" ${this.pick.muscle === k ? 'selected' : ''}>${k === 'all' ? 'Any muscle' : MUSCLES[k]}</option>`).join('')}</select></label></div>
       <div id="pickList">${this.pickList()}</div>
       <button class="btn wide" data-a="customEx">${icon('plus')} Create custom exercise</button><div style="height:80px"></div>`,
       { footer: () => this.pick.mode === 'replace' ? '' : `<div class="sheet-foot"><button class="btn primary wide" data-a="pickDone">Add ${this.pick.sel.length || ''} exercise${this.pick.sel.length === 1 ? '' : 's'}</button></div>` });
@@ -393,13 +397,29 @@ const UI = {
     const p = this.pick, q = p.q.toLowerCase().trim();
     const recent = new Set(Store.workoutsSorted().slice(0, 10).flatMap(w => w.exercises.map(e => e.exId)));
     let list = Store.allExercises().filter(e => (!p.gymOnly || Plan.available(e)) && (p.disc === 'all' || e.discipline === p.disc) && (p.muscle === 'all' || e.muscle === p.muscle || (e.secondary || []).includes(p.muscle)) && (!q || e.name.toLowerCase().includes(q) || (MUSCLES[e.muscle] || '').toLowerCase().includes(q)));
+    const grp = p.grp || 'all';
+    if (!q && p.muscle === 'all' && p.disc === 'all') {
+      const rec = list.filter(e => recent.has(e.id)).slice(0, 6);
+      return `${rec.length ? `<div class="pick-head">Recent</div>${rec.map(e => this.pickRow(e, p)).join('')}` : ''}
+        <div class="pick-head">Categories</div><div class="tile-grid">${Object.entries(DISCIPLINES).map(([k, d]) => { const n = list.filter(e => e.discipline === k).length; return n ? `<button class="card tile-btn" data-a="pickDisc" data-id="${k}">${icon(d.icon)}<b>${esc(d.name)}</b><span class="sm muted">${n} exercises</span></button>` : ''; }).join('')}</div>`;
+    }
+    if (!q && p.muscle === 'all' && grp === 'all') {
+      const groups = {}; list.forEach(e => (groups[exGroup(e)] = groups[exGroup(e)] || []).push(e));
+      if (Object.keys(groups).length > 1 && list.length > 14) return `<button class="btn sm ghost" data-a="pickDisc" data-id="all">${icon('arrow-left')} All categories</button>
+        <div class="pick-head">${esc(DISCIPLINES[p.disc].name)}</div><div class="tile-grid">${Object.entries(groups).map(([g, items]) => `<button class="card tile-btn" data-a="pickGroup" data-id="${esc(g)}"><b>${esc(g)}</b><span class="sm muted">${items.length} · ${esc(items.slice(0, 2).map(e => e.name).join(', '))}</span></button>`).join('')}</div>`;
+    }
+    if (!q && grp !== 'all') list = list.filter(e => exGroup(e) === grp);
+    const back = !q && p.disc !== 'all' && grp !== 'all' ? `<button class="btn sm ghost" data-a="pickGroup" data-id="all">${icon('arrow-left')} ${esc(DISCIPLINES[p.disc].name)}</button>` : '';
     const head = e => q ? '' : recent.has(e.id) ? 'Recent' : (DISCIPLINES[e.discipline] ? DISCIPLINES[e.discipline].name + ' · ' : '') + exGroup(e);
     list.sort((a, b) => (recent.has(b.id) - recent.has(a.id)) || (q ? 0 : head(a).localeCompare(head(b))) || a.name.localeCompare(b.name));
     let last = null;
-    return list.slice(0, 200).map(e => { const h = head(e), hd = h && h !== last ? `<div class="pick-head">${esc(h)}</div>` : ''; last = h; return `${hd}<button class="li pick ${p.sel.includes(e.id) ? 'sel' : ''}" data-a="pickToggle" data-id="${e.id}">
+    return back + (list.slice(0, 200).map(e => { const h = head(e), hd = h && h !== last ? `<div class="pick-head">${esc(h)}</div>` : ''; last = h; return hd + this.pickRow(e, p); }).join('') || '<div class="empty">No matches. Create a custom exercise below.</div>');
+  },
+  pickRow(e, p) {
+    return `<button class="li pick ${p.sel.includes(e.id) ? 'sel' : ''}" data-a="pickToggle" data-id="${e.id}">
       <span class="ex-ic">${icon(DISCIPLINES[e.discipline] ? DISCIPLINES[e.discipline].icon : 'barbell')}</span>
       <span><b>${esc(e.name)}</b><span class="sm muted">${MUSCLES[e.muscle] || ''}${e.equipment !== 'none' ? ' · ' + e.equipment : ''} · ${esc(trackingText(e).replace(/^Log /, '').replace(/\.$/, ''))}</span></span>
-      ${p.sel.includes(e.id) ? icon('circle-check', 'acc') : icon('circle', 'muted')}</button>`; }).join('') || '<div class="empty">No matches. Create a custom exercise below.</div>';
+      ${p.mode === 'browse' ? icon('chevron-right', 'muted') : p.sel.includes(e.id) ? icon('circle-check', 'acc') : icon('circle', 'muted')}</button>`;
   },
 
   // ---------- Routine editor
@@ -411,7 +431,7 @@ const UI = {
       const folders = [...new Set(Store.data.routines.map(r => r.folder || r.program).filter(Boolean))];
       return `<input class="title-input" data-rf="name" value="${esc(d.name)}" aria-label="Routine name">
       <label class="field">Folder <span class="muted sm">(optional, groups routines on Home)</span><input data-rf="folder" list="folderList" value="${esc(d.folder || d.program || '')}" placeholder="e.g. Summer cut"><datalist id="folderList">${folders.map(f => `<option value="${esc(f)}">`).join('')}</datalist></label>
-      ${d.exercises.map((e, i) => { const ex = Store.ex(e.exId); const isT = ex.type === 'dur' || ex.type === 'wdur'; const none = ex.type === 'dist' || ex.type === 'climb'; return `
+      ${d.exercises.map((e, i) => { const ex = Store.ex(e.exId); const isT = ex.type === 'dur' || ex.type === 'wdur' || ex.type === 'hang'; const none = ex.type === 'dist' || ex.type === 'climb'; return `
         <div class="card"><div class="row-between"><b>${esc(ex.name)}</b><span>
           <button class="icon-btn" data-a="rMove" data-i="${i}" data-v="-1" aria-label="Move up">${icon('arrow-up')}</button>
           <button class="icon-btn" data-a="rRemove" data-i="${i}" aria-label="Remove">${icon('x')}</button></span></div>
@@ -454,12 +474,14 @@ const UI = {
       else if (ds.f === 'enotes') a.exercises[i].notes = v;
       else if (ds.f === 'rest') a.exercises[i].rest = +v;
       else if (ds.f === 'sent') a.exercises[i].sets[j].sent = v;
-      else if (ds.f === 'st') { const st = a.exercises[i].sets[j]; st.st = v; st.sent = v !== ''; }
-      else if (['w', 'r', 'rpe', 't', 'd', 'g', 'a', 'ang'].includes(ds.f)) a.exercises[i].sets[j][ds.f] = ds.f === 'g' ? v : (ds.f === 't' && ds.fmt === 'mmss' ? (v.includes(':') ? parseDur(v) : v) : v);
+      else if (ds.f === 'st') { const st = a.exercises[i].sets[j]; st.st = v; st.sent = v !== '' && !/^p\d/.test(v); }
+      else if (ds.f === 'edge') a.exercises[i].sets[j].edge = v === 'jug' || v === '' ? v : +v;
+      else if (['w', 'r', 'rpe', 't', 'd', 'g', 'a', 'ang', 'grip'].includes(ds.f)) a.exercises[i].sets[j][ds.f] = ds.f === 'g' ? v : (ds.f === 't' && ds.fmt === 'mmss' ? (v.includes(':') ? parseDur(v) : v) : v);
       Store.save();
       if (isChange && ds.f === 'g') this.refreshSheet();
     }
     if (ds.f === 'discq' && this.top()) { this.disc = { ...(this.disc || { grp: 'all' }), q: v }; const el = $('#discList'); if (el) el.innerHTML = this.discList(this.top().discKey); }
+    if ((ds.f === 'pickdisc' || ds.f === 'pickmus') && this.pick) { if (ds.f === 'pickdisc') { this.pick.disc = v; this.pick.grp = 'all'; } else this.pick.muscle = v; const el = $('#pickList'); if (el) el.innerHTML = this.pickList(); }
     if (ds.f === 'pickq') { this.pick.q = v; $('#pickList').innerHTML = this.pickList(); }
     if (ds.rf && this.draft) {
       const d = this.draft;
@@ -511,11 +533,11 @@ function routineGroups(d) {
 }
 
 function setColumns(ex) {
-  return { wr: ['w', 'r', 'rpe'], wbw: ['w', 'r', 'rpe'], bw: ['r', 'rpe'], dur: ['t'], wdur: ['w', 't'], dist: ['d', 'tt'], climb: ['g', 'a', 'st', 'ang'] }[ex.type] || ['w', 'r'];
+  return { wr: ['w', 'r', 'rpe'], wbw: ['w', 'r', 'rpe'], bw: ['r', 'rpe'], dur: ['t'], wdur: ['w', 't'], hang: ['edge', 'grip', 'w', 't'], dist: ['d', 'tt'], climb: ['g', 'a', 'st', 'ang'] }[ex.type] || ['w', 'r'];
 }
 function colLabel(c, ex) {
-  const added = ex.type === 'wbw' || (ex.type === 'wdur' && !Climb.LIFT.includes(ex.id));
-  return { w: added ? '+' + U() : U(), r: 'Reps', rpe: 'RPE', t: 'Sec', d: 'km', tt: 'Time', g: 'Grade', a: 'Tries', sent: 'Sent', st: 'Result', ang: 'Wall' }[c];
+  const added = ex.type === 'wbw' || ex.type === 'hang' || (ex.type === 'wdur' && !Climb.LIFT.includes(ex.id));
+  return { w: added ? '+' + U() : U(), r: 'Reps', rpe: 'RPE', t: 'Sec', d: 'km', tt: 'Time', g: 'Grade', a: 'Tries', sent: 'Sent', st: 'Result', ang: 'Wall', edge: 'mm', grip: 'Grip' }[c];
 }
 function setInput(ex, c, s, i, j) {
   const p = s.p || {};
@@ -525,6 +547,8 @@ function setInput(ex, c, s, i, j) {
     return `<select data-f="g" data-i="${i}" data-j="${j}" aria-label="Grade"><option value="">${esc(p.g || '–')}</option>${opts.map(g => `<option ${s.g === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>`;
   }
   if (c === 'st') { const cur = s.st != null ? s.st : (s.sent ? 'sent' : ''); return `<select data-f="st" data-i="${i}" data-j="${j}" aria-label="Result">${CLIMB_RESULTS.filter(r => r[0] !== 'onsight' || Climb.cat(ex) === 'route').map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`; }
+  if (c === 'edge') { const cur = s.edge != null && s.edge !== '' ? String(s.edge) : ''; return `<select data-f="edge" data-i="${i}" data-j="${j}" aria-label="Edge depth"><option value="">${p.edge ? esc(String(p.edge === 'jug' ? 'Jug' : p.edge)) : '–'}</option>${[...Climb.EDGES.map(String), 'jug'].map(v => `<option value="${v}" ${cur === v ? 'selected' : ''}>${v === 'jug' ? 'Jug' : v}</option>`).join('')}</select>`; }
+  if (c === 'grip') return `<select data-f="grip" data-i="${i}" data-j="${j}" aria-label="Grip"><option value="">${esc(p.grip ? (Climb.GRIPS.find(g => g[0] === p.grip) || [0, 0, p.grip])[2] : 'Grip')}</option>${Climb.GRIPS.map(([v, , sh]) => `<option value="${v}" ${s.grip === v ? 'selected' : ''}>${sh}</option>`).join('')}</select>`;
   if (c === 'ang') return `<select data-f="ang" data-i="${i}" data-j="${j}" aria-label="Wall angle">${CLIMB_ANGLES.map(([v, l]) => `<option value="${v}" ${(s.ang || '') === v ? 'selected' : ''}>${v ? l : '–'}</option>`).join('')}</select>`;
   if (c === 'tt') return `<input inputmode="numeric" data-f="t" data-fmt="mmss" data-i="${i}" data-j="${j}" value="${s.t !== '' ? fmtDur(s.t) : ''}" placeholder="${p.t ? fmtDur(p.t) : 'mm:ss'}" aria-label="Time">`;
   const ph = c === 'w' ? fmtW(p.w) : (p[c] != null ? p[c] : '');
@@ -535,9 +559,16 @@ function prevText(ex, s) {
   if (ex.type === 'dist') return `${s.d || 0}km ${fmtDur(s.t)}`;
   if (ex.type === 'dur') return `${s.t}s`;
   if (ex.type === 'climb') return `${s.g || '?'}${s.sent ? (s.st === 'flash' || s.st === 'onsight' ? ' ⚡' : ' ✓') : ''}`;
+  if (ex.type === 'hang') return `${s.edge ? (s.edge === 'jug' ? 'jug' : s.edge + 'mm') : ''}${s.grip ? ' ' + (Climb.GRIPS.find(g => g[0] === s.grip) || [0, 0, s.grip])[2] : ''} ${+s.w ? (+s.w > 0 ? '+' : '') + fmtW(s.w) : 'BW'} ${s.t || 0}s`.trim();
   if (ex.type === 'wdur') return `${Climb.LIFT.includes(ex.id) ? fmtW(s.w) : (+s.w ? '+' + fmtW(s.w) : 'BW')} ${s.t || 0}s`;
   if (ex.type === 'bw') return `${s.r}`;
   return `${fmtW(s.w)}×${s.r}`;
+}
+// Muscles still recovering, with roughly how long until they're ready
+function recoveryList() {
+  const r = Coach.recovery(Date.now(), true), list = Object.entries(r.pct).filter(([m, p]) => p < 95 && MUSCLES[m] && !['full_body', 'cardio', 'mobility'].includes(m)).sort((a, b) => a[1] - b[1]);
+  if (!list.length) return '<div class="sm muted center" style="margin-top:8px">Everything is recovered. A good day for a big session.</div>';
+  return `<div class="rec-list">${list.map(([m, p]) => `<div class="rec-row"><span>${MUSCLES[m]}</span><div class="rec-bar"><div class="rc-bg-${p >= 75 ? 1 : p >= 50 ? 2 : 3}" style="width:${p}%"></div></div><span class="sm muted">${r.left[m] ? 'ready in ~' + (r.left[m] >= 24 ? Math.round(r.left[m] / 24 * 10) / 10 + ' d' : r.left[m] + ' h') : p + '%'}</span></div>`).join('')}</div>`;
 }
 function workoutVolume(w, includeOpen) {
   let v = 0;
@@ -672,8 +703,18 @@ const TIMER_PRESETS = {
   boxing: { name: 'Boxing', icon: 'karate', work: 180, rest: 60, rounds: 6, about: 'Boxing rounds: 3 minutes on, 1 minute off. For bag work, shadow boxing or pads.',
     how: ['Wrap your hands and warm up.', 'Each round has a focus shown on screen. Keep your guard up and keep moving.', 'Use the minute off to breathe and shake out your arms.'],
     moves: ['Jab and cross', 'Hooks and uppercuts', 'Body shots', 'Defence and footwork', 'Free combinations', 'All-out last round'] },
+  maxhang: { name: 'Max hangs', icon: 'hand-grab', work: 10, rest: 180, rounds: 5, about: 'Hangboard max hangs: short, heavy hangs with long rests to build finger strength.',
+    how: ['Pick a 20 mm edge and a half-crimp grip.', 'Add weight so you could hold about 3 seconds longer than the hang time.', 'Hang when the screen says Go, step off at the beep.', 'Rest fully. Stop if anything hurts.'], moves: ['20 mm half crimp'] },
+  repeaters: { name: 'Repeaters', icon: 'repeat', work: 7, rest: 3, reps: 6, setRest: 180, rounds: 5, about: 'Hangboard repeaters: 7 s on, 3 s off, six hangs per set, for finger endurance.',
+    how: ['Use a slightly bigger edge than for max hangs.', 'Hang for 7 s, let go for 3 s, six times. That is one set.', 'Rest 3 minutes between sets.', 'If you can\'t finish the last hangs, use a bigger edge or take weight off.'], moves: ['20 mm open hand'] },
+  abrahang: { name: 'Abrahangs', icon: 'heart-handshake', work: 10, rest: 20, rounds: 30, about: 'Very easy hangs for finger health: 10 s on, 20 s off for about 15 minutes.',
+    how: ['Keep your feet on the ground or use a light load so it feels like 40–60% effort.', 'Hang 10 s, rest 20 s, and repeat.', 'Good on rest days or before climbing.'], moves: [] },
   bjj: { name: 'BJJ rolls', icon: 'users', work: 300, rest: 60, rounds: 5, about: 'Timed sparring rounds for grappling. Switch partners each round.',
     how: ['Agree on intensity with your partner.', 'Roll for the round time. Tap early, tap often.', 'Rest and switch partners during the break.'],
     moves: [] }
 };
-function timerSummary(c) { const total = c.rounds * c.work + Math.max(0, c.rounds - 1) * c.rest + (c.prep || 0); return `${c.rounds} × ${fmtDur(c.work)} work${c.rest ? ' / ' + fmtDur(c.rest) + ' rest' : ''} · total ${fmtDur(total)}`; }
+function timerSummary(c) {
+  const reps = c.reps || 1;
+  if (reps > 1) { const set = reps * c.work + (reps - 1) * c.rest, total = c.rounds * set + Math.max(0, c.rounds - 1) * (c.setRest || 0) + (c.prep || 0); return `${c.rounds} sets × ${reps} hangs (${c.work}s on / ${c.rest}s off) · ${fmtDur(c.setRest || 0)} between sets · total ${fmtDur(total)}`; }
+  const total = c.rounds * c.work + Math.max(0, c.rounds - 1) * c.rest + (c.prep || 0); return `${c.rounds} × ${fmtDur(c.work)} work${c.rest ? ' / ' + fmtDur(c.rest) + ' rest' : ''} · total ${fmtDur(total)}`;
+}

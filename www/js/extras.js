@@ -3,38 +3,40 @@
 
 // ---------- Body map (front and back), colored by weekly sets or by recovery
 const BodyMap = {
-  // [muscle, view, svg shape]
-  SHAPES: [
-    ['shoulders', 'f', '<ellipse cx="36" cy="58" rx="11" ry="9"/><ellipse cx="104" cy="58" rx="11" ry="9"/>'],
-    ['chest', 'f', '<rect x="45" y="56" width="24" height="22" rx="6"/><rect x="71" y="56" width="24" height="22" rx="6"/>'],
-    ['biceps', 'f', '<rect x="25" y="70" width="12" height="26" rx="6"/><rect x="103" y="70" width="12" height="26" rx="6"/>'],
-    ['forearms', 'f', '<rect x="20" y="99" width="11" height="28" rx="5"/><rect x="109" y="99" width="11" height="28" rx="5"/>'],
-    ['abs', 'f', '<rect x="56" y="81" width="28" height="38" rx="6"/>'],
-    ['quads', 'f', '<rect x="47" y="128" width="20" height="46" rx="8"/><rect x="73" y="128" width="20" height="46" rx="8"/>'],
-    ['adductors', 'f', '<rect x="64" y="126" width="12" height="22" rx="5"/>'],
-    ['calves', 'f', '<rect x="50" y="182" width="14" height="36" rx="6"/><rect x="76" y="182" width="14" height="36" rx="6"/>'],
-    ['traps', 'b', '<path d="M52 46 L70 40 L88 46 L84 58 L56 58 Z"/>'],
-    ['shoulders', 'b', '<ellipse cx="36" cy="58" rx="11" ry="9"/><ellipse cx="104" cy="58" rx="11" ry="9"/>'],
-    ['upper_back', 'b', '<rect x="48" y="58" width="44" height="18" rx="6"/>'],
-    ['lats', 'b', '<path d="M47 76 L66 76 L64 104 L52 96 Z"/><path d="M93 76 L74 76 L76 104 L88 96 Z"/>'],
-    ['triceps', 'b', '<rect x="25" y="70" width="12" height="26" rx="6"/><rect x="103" y="70" width="12" height="26" rx="6"/>'],
-    ['forearms', 'b', '<rect x="20" y="99" width="11" height="28" rx="5"/><rect x="109" y="99" width="11" height="28" rx="5"/>'],
-    ['lower_back', 'b', '<rect x="58" y="104" width="24" height="16" rx="5"/>'],
-    ['glutes', 'b', '<ellipse cx="59" cy="132" rx="13" ry="11"/><ellipse cx="81" cy="132" rx="13" ry="11"/>'],
-    ['hamstrings', 'b', '<rect x="47" y="145" width="20" height="32" rx="8"/><rect x="73" y="145" width="20" height="32" rx="8"/>'],
-    ['calves', 'b', '<rect x="50" y="182" width="14" height="36" rx="6"/><rect x="76" y="182" width="14" height="36" rx="6"/>']
-  ],
-  OUTLINE: '<circle cx="70" cy="24" r="13"/><rect x="62" y="36" width="16" height="8"/><path d="M38 50 Q70 40 102 50 L116 66 L124 128 L108 130 L100 84 L94 122 L96 176 L92 222 L74 222 L70 150 L66 222 L48 222 L44 176 L46 122 L40 84 L32 130 L16 128 L24 66 Z"/>',
-  // values: {muscle: number}; mode 'sets' (0..20+) or 'recovery' (0..100, lower = more fatigued); or a Set of highlighted muscles
+  // Artwork regions (react-native-body-highlighter) for each of our muscle groups
+  MAP: { chest: ['chest'], abs: ['abs', 'obliques'], biceps: ['biceps'], triceps: ['triceps'], traps: ['trapezius'], shoulders: ['deltoids'], adductors: ['adductors'],
+    quads: ['quadriceps'], calves: ['calves'], forearms: ['forearm'], lats: ['upper-back'], upper_back: ['upper-back'], lower_back: ['lower-back'], glutes: ['gluteal'], hamstrings: ['hamstring'] },
+  NAMES: { chest: 'Chest', abs: 'Abs', obliques: 'Obliques', biceps: 'Biceps', triceps: 'Triceps', trapezius: 'Traps', deltoids: 'Shoulders', adductors: 'Adductors', quadriceps: 'Quads',
+    calves: 'Calves', forearm: 'Forearms', 'upper-back': 'Lats and upper back', 'lower-back': 'Lower back', gluteal: 'Glutes', hamstring: 'Hamstrings' },
+  // values: {muscle: number}; mode 'sets' (weekly sets) or 'recovery' (0..100, lower = more fatigued);
+  // highlight: {primary, secondary} to show which muscles one exercise works
   svg(values, mode = 'sets', highlight) {
-    const color = m => {
-      if (highlight) return highlight.primary === m ? 'bm-3' : (highlight.secondary || []).includes(m) ? 'bm-1' : 'bm-0';
-      const v = values[m] || 0;
-      if (mode === 'recovery') return v >= 90 ? 'bm-0' : v >= 70 ? 'bm-1' : v >= 45 ? 'bm-2' : 'bm-3';
-      return v <= 0 ? 'bm-0' : v < 6 ? 'bm-1' : v < 12 ? 'bm-2' : 'bm-3';
+    const level = m => {
+      if (highlight) return highlight.primary === m ? 3 : (highlight.secondary || []).includes(m) ? 1 : 0;
+      const v = values[m];
+      if (mode === 'recovery') return v == null || v >= 95 ? 0 : v >= 75 ? 1 : v >= 50 ? 2 : 3;
+      return !v ? 0 : v < 6 ? 1 : v < 12 ? 2 : 3;
     };
-    const view = (v, dx, label) => `<g transform="translate(${dx} 0)"><g class="bm-outline">${this.OUTLINE}</g>${this.SHAPES.filter(s => s[1] === v).map(([m, , shape]) => `<g class="${color(m)}"><title>${MUSCLES[m]}${highlight ? '' : ': ' + Math.round(values[m] || 0) + (mode === 'recovery' ? '% recovered' : ' sets')}</title>${shape}</g>`).join('')}<text x="70" y="238" class="axis" text-anchor="middle">${label}</text></g>`;
-    return `<svg viewBox="0 0 300 244" class="bodymap" role="img" aria-label="Body map">${view('f', 0, 'Front')}${view('b', 158, 'Back')}</svg>`;
+    // Region level = strongest of the muscles drawn there
+    const reg = {}, label = {};
+    Object.entries(this.MAP).forEach(([m, slugs]) => slugs.forEach(sl => {
+      const l = level(m); if (reg[sl] == null || l > reg[sl]) { reg[sl] = l; label[sl] = m; }
+    }));
+    const pre = mode === 'recovery' && !highlight ? 'rc' : 'bm';
+    const tip = sl => { const m = label[sl]; if (!m) return ''; const v = values[m];
+      return `<title>${this.NAMES[sl] || sl}${highlight ? '' : mode === 'recovery' ? `: ${v == null ? 100 : v}% recovered` : `: ${Math.round(v || 0)} sets this week`}</title>`; };
+    const draw = side => BODY_ART[side].map(p => {
+      const cls = ['head', 'hair'].includes(p.s) ? 'bm-head' : ['neck', 'knees', 'hands', 'feet', 'ankles', 'tibialis'].includes(p.s) ? 'bm-skin' : `${pre}-${reg[p.s] || 0}`;
+      return `<g class="${cls}">${tip(p.s)}${p.d.map(d => `<path d="${d}"/>`).join('')}</g>`;
+    }).join('');
+    return `<svg viewBox="40 150 1368 1250" class="bodymap" role="img" aria-label="Body map, front and back">
+      <path class="bm-outline" d="${BODY_ART.outline.front}"/><path class="bm-outline" d="${BODY_ART.outline.back}"/>${draw('front')}${draw('back')}
+      <text x="362" y="1395" text-anchor="middle">Front</text><text x="1086" y="1395" text-anchor="middle">Back</text></svg>`;
+  },
+  legend(mode) {
+    return mode === 'recovery' ? '<div class="bm-legend sm muted"><span class="rc-0">●</span> Recovered <span class="rc-1">●</span> Nearly <span class="rc-2">●</span> Recovering <span class="rc-3">●</span> Fatigued</div>'
+      : mode === 'exercise' ? '<div class="bm-legend sm muted"><span class="bm-3">●</span> Main muscle <span class="bm-1">●</span> Also works</div>'
+      : '<div class="bm-legend sm muted"><span class="bm-1">●</span> 1–5 sets <span class="bm-2">●</span> 6–11 <span class="bm-3">●</span> 12+ this week</div>';
   }
 };
 

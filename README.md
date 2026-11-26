@@ -40,7 +40,8 @@ The latest APK is always at https://github.com/JackLongman12/overload/releases.
 
 ## Accounts and cloud sync (server/)
 Optional, end-to-end encrypted sync runs on a Cloudflare Worker with a D1 database (free tier).
-- The phone derives two keys from the password with PBKDF2: an **auth key**, which is sent and stored only as a salted hash, and an **encryption key**, which is never sent. Data and photos are gzipped and AES-GCM encrypted before upload.
+- **Account keys (2.0+):** there is no email or password. The phone makes a random 25-character key (about 125 bits). The server only sees an ID hashed from the key. From the key the phone derives an **auth key** (stored on the server only as a salted hash) and an **encryption key** (never sent). Data and photos are gzipped and AES-GCM encrypted before upload. Losing the key and the phone means the cloud copy can't be recovered.
+- Accounts made with an email before 2.0 still log in from "I made an account with an email before".
 - Sync merges records by ID, and deletions sync too. Conflicts are handled with revision numbers.
 - The server keeps a daily snapshot for 14 days. You can restore one in the app.
 - Live at https://gym-app-sync.lp-reports.workers.dev
@@ -99,7 +100,10 @@ Then open http://localhost:5173.
 | File | What it does |
 |---|---|
 | `www/js/exercises.js` | Exercise library (180+), skill ladders, climbing grades, programs |
-| `www/js/coach.js` | Personal trainer: double progression, stall detection, deloads, readiness, volume balance, recovery |
+| `www/js/coach.js` | Personal trainer: double progression, stall detection, deloads, readiness, volume balance, recovery; strength calculators |
+| `www/js/climbing.js` | Grades, hangboard protocols, climbing coach, workload, profile, 16-week climbing plans |
+| `www/js/howto.js` | Directions for every exercise |
+| `www/vendor/bodymap-art.js` | Muscle map artwork from [react-native-body-highlighter](https://github.com/HichamELBSI/react-native-body-highlighter) (MIT) |
 | `www/js/store.js` | Local data and native file mirror |
 | `www/js/importers.js` | Hevy, Strong, FitNotes, GPX, TCX import; CSV and JSON export |
 | `www/js/updater.js` | Content and APK auto-update |

@@ -14,11 +14,20 @@ const Actions = {
   // ----- Check-in
   checkin() { this.openCheckin(); },
   ciSave() {
+    if (this.ci.energy == null) this.ci.energy = 3;
     const c = { ...this.ci, date: Date.now(), score: readinessScore(this.ci) };
     Store.data.checkins.push(c); if (Store.data.active) Store.data.active.readiness = c.score; Store.save(true);
     const next = this._afterCheckin; this._afterCheckin = null;
     this.closeSheet(); toast(`Readiness ${c.score}. ${readinessLabel(c.score)}`);
     if (next) next();
+  },
+  ciSet(el, d) { const [k, v] = d.id.split(':'); this.ci[k] = +v; this._ciOpen = true; this.refreshSheet(); },
+  ciMore() { this._ciOpen = !this._ciOpen; },
+  ciMood(el, d) { this.ci.energy = +d.id; this._ciOpen = false; this.ciSave(); },
+  // Automatic check-in from sleep, heart data and training, with energy assumed OK
+  autoCheckin() {
+    this.prepCheckin(false); this.ci.energy = 3; const c = { ...this.ci, auto: true, date: Date.now(), score: readinessScore(this.ci) };
+    Store.data.checkins.push(c); Store.save(true); toast(`Readiness ${c.score} (automatic). Tap Check in on Home to adjust.`);
   },
   ciSkip() { const next = this._afterCheckin; this._afterCheckin = null; this.closeSheet(); if (next) next(); },
 
@@ -120,7 +129,7 @@ const Actions = {
   },
 
   // ----- Picker
-  pickDisc(el, d) { this.pick.disc = d.id; this.refreshSheet(); },
+  pickDisc(el, d) { this.pick.disc = d.id; this.pick.grp = 'all'; this.refreshSheet(); const b = document.querySelector('.sheet-body'); if (b) b.scrollTop = 0; },
   pickMuscle(el, d) { this.pick.muscle = d.id; this.refreshSheet(); },
   pickToggle(el, d) {
     const p = this.pick;
@@ -140,8 +149,37 @@ const Actions = {
   // ----- Details
   exDetail(el, d) { this.openExDetail(d.id); },
   climbStats() { this.openClimbing(); },
+  climbPlan() { this.cplan = null; this.openClimbPlan(); },
+  cplanSet(el, d) { const [k, v] = d.id.split(':'); this.cplan[k] = v === 'true' ? true : v === 'false' ? false : /^\d+$/.test(v) ? +v : v; this.refreshSheet(); },
+  cplanSave() {
+    const o = this.cplan, p = Climb.buildPlan(o);
+    // Replace the routines of an earlier climbing plan
+    const old = Store.data.routines.filter(r => r.program && r.program.startsWith('My climbing plan'));
+    old.forEach(r => Store.tombstone(r.id)); Store.data.routines = Store.data.routines.filter(r => !old.includes(r));
+    p.routines.forEach(([name, exs]) => Store.data.routines.push({ id: uid(), name, program: p.name, exercises: exs.map(([exId, sets, repMin, repMax]) => { const ex = Store.ex(exId); return { exId, sets, repMin, repMax, rest: ex.type === 'climb' ? 180 : ex.type === 'hang' ? 180 : repMax <= 8 ? 180 : Store.data.settings.rest }; }) }));
+    Store.data.settings.climbPlan = { ...o, start: startOfWeek() };
+    Store.save(true); this.closeSheet(); this.refreshSheet(); toast(`Plan started: ${p.routines.length} routines added to Home`);
+  },
+  climbPlanEnd() { if (!confirm('End your climbing plan? Its routines stay on Home.')) return; delete Store.data.settings.climbPlan; Store.save(true); this.refreshSheet(); },
   programDetail(el, d) { this.openProgramDetail(d.id); },
+  pickGroup(el, d) { this.pick.grp = d.id; const l = $('#pickList'); if (l) l.innerHTML = this.pickList(); const b = document.querySelector('.sheet-body'); if (b) b.scrollTop = 0; },
   discGroup(el, d) { this.disc = { ...(this.disc || { q: '' }), grp: d.id }; this.refreshSheet(); },
+  // Hangboard timer for the current exercise's protocol, labelled with edge, grip and load
+  hangTimer(el, d) {
+    const e = Store.data.active.exercises[+d.i], ex = Store.ex(e.exId), P = Climb.protocol(ex), work = e.sets.filter(s => s.type !== 'W');
+    const s = work.find(x => !x.done) || work[0] || {}, val = k => (s[k] !== '' && s[k] != null ? s[k] : (s.p || {})[k]);
+    const edge = val('edge'), w = +val('w') || 0, label = `${edge ? (edge === 'jug' ? 'Jug' : edge + ' mm') : ''} ${Climb.gripName(val('grip') || 'half').toLowerCase()} · ${w ? (w > 0 ? '+' : '') + fmtW(w) + ' ' + U() : 'body weight'}`.trim();
+    const T = P.timer, sets = Math.max(1, work.filter(x => !x.done).length || work.length);
+    this.tconf = { type: 'hang', name: P.name, work: ex.id === 'max_hang_added_weight' || ex.id === 'hangboard_hang' ? (+val('t') || T.work) : T.work, rest: T.rest, rounds: T.perArm ? sets * 2 : sets, reps: T.reps || 1, setRest: T.setRest || 0, prep: 10,
+      moves: T.perArm ? ['Left arm · ' + label, 'Right arm · ' + label] : [label], ei: +d.i };
+    this.startTimer();
+  },
+  hangDone() {
+    const c = Timer.conf, a = Store.data.active; if (!a || c.ei == null) return this.closeSheet();
+    const e = a.exercises[c.ei], sets = Math.round(c.rounds / (Climb.protocol(Store.ex(e.exId)).timer.perArm ? 2 : 1));
+    e.sets.filter(s => s.type !== 'W' && !s.done).slice(0, sets).forEach(s => { const p = s.p || {}; ['edge', 'grip', 'w'].forEach(k => { if ((s[k] === '' || s[k] == null) && p[k] != null) s[k] = p[k]; }); if (s.t === '' || s.t == null) s.t = (c.reps || 1) > 1 ? c.reps * c.work : c.work; s.done = true; });
+    Store.save(); this.closeSheet(); toast('Sets marked done');
+  },
   toggleHow(el, d) { const e = Store.data.active.exercises[+d.i]; e.showHow = !e.showHow; Store.save(); this.refreshSheet(); },
   hideLogTips() { Store.data.settings.hideLogTips = true; Store.save(); this.refreshSheet(); },
   climbDays(el, d) { this._climbDays = +d.id; this.refreshSheet(); },
@@ -303,7 +341,27 @@ const Actions = {
   hrDisconnect() { BLE.disconnectHR(true); },
 
   // ----- Account and sync
-  account() { this.authMode = this.authMode || 'signup'; this.openAccount(); },
+  account() { this.authMode = 'new'; this.authErr = ''; this.openAccount(); },
+  async keyCreate() {
+    if (this.authBusy) return;
+    this.authBusy = 'new'; this.authErr = ''; this.refreshSheet();
+    try { const key = await Sync.keySignup(); this.authBusy = false; this.refreshSheet(); this.showAccountKey(key, true); }
+    catch (e) { this.authBusy = false; this.authErr = e.message; this.refreshSheet(); }
+  },
+  async keyLogin() {
+    if (this.authBusy) return;
+    const key = ($('#authKey') || {}).value || '';
+    this.authBusy = 'key'; this.authErr = ''; this.refreshSheet();
+    try { await Sync.keyLogin(key); toast('Logged in. Your data is syncing.'); }
+    catch (e) { this.authErr = e.message; }
+    this.authBusy = false; this.refreshSheet();
+  },
+  showKey() { this.showAccountKey(Sync.acct.key, false); },
+  async shareKey() {
+    const text = 'Gym App account key: ' + this.recCode, sh = Plugin('Share');
+    try { if (sh) await sh.share({ title: 'Gym App account key', text }); else if (navigator.share) await navigator.share({ text }); else download('gym-app-account-key.txt', text, 'text/plain'); } catch (e) { }
+  },
+  savedKey() { this.recCode = null; this.closeSheet(); toast('Account ready. Your data is syncing.'); },
   authMode(el, d) { this.authMode = d.id; this.authErr = ''; this.refreshSheet(); },
   async authSubmit() {
     const email = ($('#authEmail') || {}).value || '', pw = ($('#authPw') || {}).value || '', pw2 = ($('#authPw2') || {}).value, code = ($('#authCode') || {}).value || '';
@@ -311,7 +369,8 @@ const Actions = {
     const fail = m => { this.authErr = m; this.refreshSheet(); };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return fail('Enter a valid email address.');
     if (mode === 'recover' && code.replace(/[^A-Za-z0-9]/g, '').length !== 25) return fail('Enter the 25-character recovery key.');
-    if (pw.length < 10) return fail('Use a password of at least 10 characters.');
+    if (mode === 'login' && !pw) return fail('Enter your password.');
+    if (mode !== 'login' && pw.length < 10) return fail('Use a password of at least 10 characters.');
     if (mode !== 'login' && pw !== pw2) return fail("The passwords don't match.");
     this.authBusy = true; this.authErr = ''; this.refreshSheet();
     try {
