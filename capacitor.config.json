@@ -1,6 +1,6 @@
 {
   "appId": "com.overload.gym",
-  "appName": "Overload",
+  "appName": "Gym App",
   "webDir": "www",
   "android": { "backgroundColor": "#0f1115" },
   "plugins": {

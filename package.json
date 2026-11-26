@@ -2,7 +2,7 @@
   "name": "overload-gym",
   "version": "1.0.0",
   "private": true,
-  "description": "Overload: free gym tracker with a progressive overload coach",
+  "description": "Gym App: free gym tracker with a progressive overload coach",
   "scripts": {
     "serve": "node scripts/serve.mjs",
     "sync": "npx cap sync android",

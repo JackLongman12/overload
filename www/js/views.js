@@ -4,7 +4,7 @@ const MEASURES = [['weight', 'Body weight', () => U()], ['bodyfat', 'Body fat', 
   ['arm', 'Arm', () => 'cm'], ['thigh', 'Thigh', () => 'cm'], ['calf', 'Calf', () => 'cm'], ['neck', 'Neck', () => 'cm'], ['rhr', 'Resting heart rate', () => 'bpm']];
 
 const DISCLAIMER_HTML = `<div class="card warn-card sm"><b>Health and safety</b>
-  <p>Overload gives general training suggestions based on the numbers you log. It is not medical advice and doesn't know about your injuries, health conditions or form.</p>
+  <p>Gym App gives general training suggestions based on the numbers you log. It is not medical advice and doesn't know about your injuries, health conditions or form.</p>
   <p>Check with a doctor before starting a new training program, especially if you have a medical condition, are pregnant, or haven't exercised in a while. Stop and get help if you feel pain, dizziness or chest discomfort. Ignore any suggestion that doesn't feel right for your body.</p></div>`;
 
 const Timer = {
@@ -82,7 +82,7 @@ Object.assign(UI, {
   },
 
   openWelcome() {
-    this.openSheet('welcome', 'Welcome', () => `<div class="celebrate">${icon('barbell')}<h2>Welcome to Overload</h2><div class="muted sm">Every feature free. No account. No ads.</div></div>
+    this.openSheet('welcome', 'Welcome', () => `<div class="celebrate">${icon('barbell')}<h2>Welcome to Gym App</h2><div class="muted sm">Every feature free. No account. No ads.</div></div>
       <div class="card list">
         <div class="li static col"><b>${icon('sparkles')} A coach that adapts</b><span class="sm muted">It suggests when to add reps, sets or weight, and when to back off.</span></div>
         <div class="li static col"><b>${icon('lock')} Private by design</b><span class="sm muted">Your workouts stay on this phone. Nothing is uploaded.</span></div>
@@ -310,7 +310,7 @@ Object.assign(UI, {
         <div class="fmt"><b>FitNotes</b>: Settings, Spreadsheet export (CSV)</div>
         <div class="fmt"><b>Strava, Garmin, Nike Run, Coros, Polar</b>: GPX or TCX activity files</div>
         <div class="fmt"><b>Any spreadsheet</b>: CSV with Date, Exercise, Weight and Reps columns</div>
-        <div class="fmt"><b>Overload backup</b>: .json from this app</div>
+        <div class="fmt"><b>Gym App backup</b>: .json from this app</div>
       </div>
       <label class="field">Weight unit in the file (when the file doesn't say)<select data-imp="1"><option value="kg" ${this.impUnit === 'kg' ? 'selected' : ''}>kg</option><option value="lb" ${this.impUnit === 'lb' ? 'selected' : ''}>lb</option></select></label>
       <label class="btn primary wide">${icon('file-import')} Choose file<input type="file" accept=".csv,.json,.gpx,.tcx,text/csv,application/json,application/gpx+xml,application/xml,text/xml" data-a-change="importFile" hidden></label>

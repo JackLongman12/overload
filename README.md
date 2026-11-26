@@ -1,11 +1,11 @@
-# Overload: a free gym tracker with a progressive overload coach
+# Gym App: a free gym tracker with a progressive overload coach
 
 Every feature is free. No account, no ads. Data stays on your phone.
 
 ## Install on your Android phone
-1. Download the latest `overload-<version>.apk` from https://github.com/JackLongman12/overload/releases on your phone (or copy it from `dist/`).
+1. Download the latest `gym-app-<version>.apk` from https://github.com/JackLongman12/overload/releases on your phone (or copy it from `dist/`).
 2. Open it on the phone. Android asks you to allow installs from that app (Files/Drive). Allow it, then tap **Install**.
-3. Open **Overload**. Allow notifications so the rest timer and interval timers alert you with the screen off.
+3. Open **Gym App**. Allow notifications so the rest timer and interval timers alert you with the screen off.
 
 ## Keys: back these up
 `keys/` holds two private keys. Git ignores them, so they exist only on this PC.
@@ -18,7 +18,7 @@ Copy the `keys/` folder to a password manager or an encrypted USB drive. To crea
 ```
 node scripts/build-apk.mjs
 ```
-Outputs a release-signed `dist/overload-<version>.apk` (for phones) and `.aab` (for Google Play). Uses JDK 21 and the Android SDK on this PC.
+Outputs a release-signed `dist/gym-app-<version>.apk` (for phones) and `.aab` (for Google Play). Uses JDK 21 and the Android SDK on this PC.
 
 ## Auto-update
 There are two kinds of update:
@@ -45,7 +45,7 @@ The latest APK is always at https://github.com/JackLongman12/overload/releases.
 - FitNotes CSV
 - Any CSV with Date, Exercise, Weight and Reps columns
 - GPX and TCX files (Strava, Garmin and others)
-- Overload `.json` backups
+- Gym App `.json` backups
 
 It exports a JSON backup, Strong-format CSV (which Hevy can import) and Hevy-format CSV.
 

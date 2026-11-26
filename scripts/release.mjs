@@ -21,11 +21,11 @@ if (exists(tag)) sh(`gh release upload ${tag} dist/${zipName} --clobber --repo $
 else sh(`gh release create ${tag} dist/${zipName} --repo ${cfg.repo} --title "Content update ${version}" --notes "${cfg.notes.replace(/"/g, "'")}"`);
 
 // 2) Optional APK
-const apkName = `overload-${cfg.apkVersionName}.apk`, apkTag = `apk-${cfg.apkVersionName}`;
+const apkName = `gym-app-${cfg.apkVersionName}.apk`, apkTag = `apk-${cfg.apkVersionName}`;
 if (withApk) {
   if (!fs.existsSync('dist/' + apkName)) throw new Error('Build the APK first: node scripts/build-apk.mjs');
   if (exists(apkTag)) sh(`gh release upload ${apkTag} dist/${apkName} --clobber --repo ${cfg.repo}`);
-  else sh(`gh release create ${apkTag} dist/${apkName} --repo ${cfg.repo} --title "Overload app ${cfg.apkVersionName}" --notes "Install this APK on Android. ${cfg.notes.replace(/"/g, "'")}" --latest`);
+  else sh(`gh release create ${apkTag} dist/${apkName} --repo ${cfg.repo} --title "Gym App ${cfg.apkVersionName}" --notes "Install this APK on Android. ${cfg.notes.replace(/"/g, "'")}" --latest`);
 }
 
 // 3) Signed feed. The app verifies `sig` with the public key in www/js/updatekey.js,

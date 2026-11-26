@@ -192,9 +192,9 @@ const Actions = {
   },
   importCommit() { const r = this.importResult; const n = IO.commit(r); this.importResult = null; this.refreshSheet(); toast(`Imported ${n} workout(s)`); },
   importCancel() { this.importResult = null; this.refreshSheet(); },
-  async exportJSON() { toast('Preparing backup…'); download(`overload-backup-${new Date().toISOString().slice(0, 10)}.json`, await Store.exportJSON(), 'application/json'); this.render(); },
-  exportStrong() { download(`overload-strong-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toStrongCSV(), 'text/csv'); },
-  exportHevy() { download(`overload-hevy-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toHevyCSV(), 'text/csv'); },
+  async exportJSON() { toast('Preparing backup…'); download(`gym-app-backup-${new Date().toISOString().slice(0, 10)}.json`, await Store.exportJSON(), 'application/json'); this.render(); },
+  exportStrong() { download(`gym-app-strong-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toStrongCSV(), 'text/csv'); },
+  exportHevy() { download(`gym-app-hevy-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toHevyCSV(), 'text/csv'); },
   wipeData() {
     if (!confirm('Delete ALL workouts, routines, measurements and photos from this phone? This can\'t be undone. Export a backup first.')) return;
     if (!confirm('Are you sure? Everything will be erased.')) return;

@@ -17,7 +17,7 @@ run('npx cap sync android');
 const gw = process.platform === 'win32' ? `"${path.resolve('android/gradlew.bat')}"` : './gradlew';
 run(`${gw} assembleRelease bundleRelease`, 'android');
 fs.mkdirSync('dist', { recursive: true });
-const base = `dist/overload-${cfg.apkVersionName}`;
+const base = `dist/gym-app-${cfg.apkVersionName}`;
 fs.copyFileSync('android/app/build/outputs/apk/release/app-release.apk', base + '.apk');
 fs.copyFileSync('android/app/build/outputs/bundle/release/app-release.aab', base + '.aab');
 console.log('\nReady:\n  ' + path.resolve(base + '.apk') + '  (install on phones)\n  ' + path.resolve(base + '.aab') + '  (upload to Google Play)');

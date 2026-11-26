@@ -1,4 +1,4 @@
-// Import from other apps (Hevy, Strong, FitNotes, generic CSV, GPX, TCX, Overload backup)
+// Import from other apps (Hevy, Strong, FitNotes, generic CSV, GPX, TCX, Gym App backup)
 // and export to portable formats (JSON backup, Strong CSV, Hevy CSV).
 'use strict';
 
@@ -183,8 +183,8 @@ const IO = {
 
   fromBackup(text) {
     const j = JSON.parse(text);
-    if (j.app !== 'overload' || !j.data) throw new Error('This JSON file isn\'t an Overload backup.');
-    return { source: 'Overload backup', backup: j, workouts: j.data.workouts || [], exercisesCreated: 0 };
+    if (j.app !== 'overload' || !j.data) throw new Error('This JSON file isn\'t a Gym App backup.');
+    return { source: 'Gym App backup', backup: j, workouts: j.data.workouts || [], exercisesCreated: 0 };
   },
 
   async parseFile(file, fileUnit) {
