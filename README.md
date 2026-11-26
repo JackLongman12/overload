@@ -51,6 +51,15 @@ cd server
 npx wrangler deploy
 ```
 
+## Watches, scales and sensors
+- **Health Connect** (Samsung, Pixel/Fitbit, Xiaomi, Amazfit, Garmin, some Honor): sleep, resting HR and HRV feed the readiness score. Weight and body fat sync into measurements. Watch cardio sessions are imported, and workout heart rate is added. Code is in `www/js/device.js` (`HC`).
+- **Xiaomi Bluetooth scales** (Mi Smart Scale and Mi Body Composition Scale 1 and 2): weight is read passively from the scale's broadcast (`BLE.parseMi1` and `BLE.parseMi2`).
+- **Heart-rate straps and watches** that broadcast heart rate (standard BLE 0x180D): live bpm during workouts, and average and max are saved.
+- Apple Watch isn't supported because it only pairs with iPhone.
+
+## AI rep counter (on-device)
+MediaPipe Pose Landmarker runs on the phone (`www/js/pose.js`). It counts reps from joint angles and gives form cues for squat depth and push-up hip line. The roughly 20 MB AI pack is downloaded on first use and SHA-256-checked against hashes in the signed app. It isn't in the update bundle, so over-the-air updates stay small.
+
 ## Import and export
 **You > Import, export and sync** reads:
 - Hevy CSV

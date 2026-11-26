@@ -11,6 +11,7 @@ const UI = {
     await Store.load();
     await Sync.load();
     this.bind();
+    if (HC.on) HC.pull().then(() => { if (!this.stack.length) this.render(); });
     this.render();
     setInterval(() => this.tick(), 1000);
     Updater.init();
@@ -50,6 +51,10 @@ const UI = {
     else if (u === 'apk') ub.innerHTML = `<div class="updbar">${icon('brand-android')} A new app version is available <button class="btn sm primary" data-a="openApk">Download</button></div>`;
     else if (u === 'web') ub.innerHTML = `<div class="updbar">${icon('refresh')} New version ${esc(Updater.info.version)} <button class="btn sm primary" data-a="applyUpdate">Reload</button></div>`;
     else ub.innerHTML = '';
+  },
+  onDeviceState() {
+    if (this.stack.length && this.top().key === 'devices') this.refreshSheet();
+    if (this.stack.length && this.top().key === 'workout') this.refreshSheet();
   },
   onSyncState() {
     const el = $('#syncLabel'); if (el) el.textContent = Sync.label();
@@ -99,6 +104,7 @@ const UI = {
     <div class="card">
       <div class="row-between"><div><div class="muted sm">Readiness today</div>
       ${ci ? `<div class="big">${ci.score}<span class="muted sm"> / 100</span></div><div class="sm muted">${readinessLabel(ci.score)}</div>` : `<div class="sm">Check in so the coach can adjust today's targets.</div>`}</div>
+      ${d.health && d.health.steps ? `<div class="sm muted">${icon('shoe')} ${fmtNum(d.health.steps)} steps today${d.health.sleepH ? ' · ' + d.health.sleepH + ' h sleep' : ''}</div>` : ''}
       <button class="btn ${ci ? '' : 'primary'}" data-a="checkin">${icon('heart-rate-monitor')} ${ci ? 'Redo' : 'Check in'}</button></div>
     </div>
     <div class="grid2">
@@ -164,7 +170,7 @@ const UI = {
     return `
     <div class="page-head"><h1>Progress</h1></div>
     <div class="section-head"><h3>${icon('sparkles')} Coach</h3></div>
-    <div class="card">${ins.map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}<div class="sm muted" style="padding-top:8px">General guidance, not medical advice. <button class="link sm" data-a="disclaimer">Health and safety</button></div></div>
+    <div class="card">${(this._allIns ? ins : ins.slice(0, 4)).map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}${ins.length > 4 ? `<button class="link sm" data-a="toggleIns">${this._allIns ? 'Show less' : `Show all ${ins.length}`}</button>` : ''}<div class="sm muted" style="padding-top:8px">General guidance, not medical advice. <button class="link sm" data-a="disclaimer">Health and safety</button></div></div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${ws.length}</b></div>
       <div class="stat"><div class="muted sm">Week streak</div><b>${weekStreak()}</b></div>
@@ -195,6 +201,7 @@ const UI = {
     <div class="card"><div class="row-between"><b>Progress photos</b><label class="btn sm">${icon('camera')} Add<input type="file" accept="image/*" data-a-change="addPhoto" hidden></label></div>
       <div class="photos">${Store.photos.slice().reverse().slice(0, 9).map(p => `<button data-a="viewPhoto" data-id="${p.id}"><img src="${Photos.src(p)}" alt="Progress photo, ${fmtDate(p.date)}"><span>${fmtDate(p.date, { day: 'numeric', month: 'short' })}</span></button>`).join('') || '<div class="sm muted">Photos stay on this phone.</div>'}</div></div>
     <div class="card list">
+      <button class="li" data-a="devices">${icon('device-watch')}<span>Watches, scales and sensors</span><span class="muted sm">${[HC.on ? 'Health Connect' : '', BLE.hrDevice ? 'HR' : ''].filter(Boolean).join(', ') || 'Connect'}</span></button>
       <button class="li" data-a="account">${icon('cloud')}<span>Account and sync</span><span class="muted sm" id="syncLabel">${Sync.label()}</span></button>
       <button class="li" data-a="settings">${icon('settings')}<span>Settings</span>${icon('chevron-right', 'muted')}</button>
       <button class="li" data-a="dataSheet">${icon('file-import')}<span>Import, export and sync</span>${icon('chevron-right', 'muted')}</button>
@@ -213,6 +220,7 @@ const UI = {
   newWorkout(name, routine) {
     const ex = routine ? routine.exercises.map(re => this.makeWorkoutEx(re.exId, { sets: re.sets, repMin: re.repMin, repMax: re.repMax }, re.rest)) : [];
     Store.data.active = { id: uid(), name: name || 'Workout', routineId: routine ? routine.id : null, start: Date.now(), exercises: ex, readiness: Coach.readiness() };
+    BLE.autoHR();
     Store.save(true);
     this.openWorkout();
   },
@@ -239,7 +247,7 @@ const UI = {
     const vol = workoutVolume(a, true), done = a.exercises.reduce((s, e) => s + e.sets.filter(x => x.done).length, 0);
     return `
       <input class="title-input" data-f="wname" value="${esc(a.name)}" aria-label="Workout name">
-      <div class="row muted sm wstats"><span>${icon('weight')} ${fmtNum(vol)} ${U()}</span><span>${icon('check')} ${done} sets</span>${a.readiness != null ? `<span>${icon('heart-rate-monitor')} readiness ${a.readiness}</span>` : ''}</div>
+      <div class="row muted sm wstats"><span>${icon('weight')} ${fmtNum(vol)} ${U()}</span><span>${icon('check')} ${done} sets</span>${a.readiness != null ? `<span>${icon('heart-rate-monitor')} readiness ${a.readiness}</span>` : ''}${BLE.hrDevice ? `<span class="hr">${icon('heart')} <span class="hrLive">${BLE.hr || '–'}</span> bpm</span>` : ''}</div>
       ${a.exercises.map((e, i) => this.exCard(e, i, a)).join('')}
       <button class="btn wide primary-ghost" data-a="addExercise">${icon('plus')} Add exercise</button>
       <button class="btn wide danger-ghost" data-a="discardWorkout">${icon('trash')} Discard workout</button>
@@ -279,6 +287,7 @@ const UI = {
       <div class="row-between ex-foot">
         <button class="btn sm" data-a="addSet" data-i="${i}">${icon('plus')} Set</button>
         <button class="btn sm ghost" data-a="removeSet" data-i="${i}">${icon('minus')} Set</button>
+        ${['wr', 'wbw', 'bw'].includes(ex.type) ? `<button class="btn sm ghost" data-a="countReps" data-i="${i}" aria-label="Count reps with camera">${icon('camera')}</button>` : ''}
         ${ex.type !== 'dist' ? `<label class="rest-sel sm">${icon('clock')}<select data-f="rest" data-i="${i}">${[0, 30, 45, 60, 90, 120, 150, 180, 240, 300].map(v => `<option value="${v}" ${+e.rest === v ? 'selected' : ''}>${v ? fmtDur(v) : 'Off'}</option>`).join('')}</select></label>` : ''}
       </div></div>`;
   },
@@ -301,6 +310,7 @@ const UI = {
 
   tick() {
     const a = Store.data.active;
+    Wake.set(!!a || (!!Timer.iv && !Timer.finished && !Timer.paused));
     if (a) $$('.wtime').forEach(el => el.textContent = fmtDur((Date.now() - a.start) / 1000));
     if (this.restEnd) {
       const left = Math.round((this.restEnd - Date.now()) / 1000);
@@ -328,6 +338,8 @@ const UI = {
       exercises: a.exercises.map(e => ({ exId: e.exId, target: e.target, notes: e.notes, ss: e.ss, rest: e.rest, sets: e.sets.filter(s => s.done).map(({ p, ...s }) => s) })).filter(e => e.sets.length) };
     const prs = findPRs(w);
     w.prs = prs.length; w.u = Date.now();
+    if (a.hr && a.hr.length > 3) { const v = a.hr.map(x => x[1]); w.hr = { avg: Math.round(v.reduce((p, q) => p + q, 0) / v.length), max: Math.max(...v), src: 'strap' }; }
+    else if (HC.on) HC.workoutHR(w.start, w.end).then(hr => { if (hr) { w.hr = hr; Store.save(); } });
     Store.data.workouts.push(w); Store.data.active = null; Store.save(true);
     this.restEnd = 0; Notify.cancel(REST_NOTIF);
     this.stack = []; this.render();
@@ -419,6 +431,11 @@ const UI = {
       const s = Store.data.settings;
       if (ds.setting === 'plates') s.plates = v.split(/[ ,;]+/).map(num).filter(Boolean).sort((x, y) => y - x);
       else if (['rest', 'bar', 'bodyweight', 'weekGoal'].includes(ds.setting)) s[ds.setting] = num(v);
+      else if (ds.setting === 'unit' && v !== s.unit) {
+        const from = s.unit;
+        if (Store.data.workouts.length && confirm(`Convert your logged weights from ${from} to ${v}? Choose Cancel to keep the numbers as they are.`)) convertUnits(from, v);
+        else { s.unit = v; if (v === 'lb') { s.bar = 45; s.plates = [45, 35, 25, 10, 5, 2.5]; } else { s.bar = 20; s.plates = [25, 20, 15, 10, 5, 2.5, 1.25]; } }
+      }
       else s[ds.setting] = v;
       Store.save();
       if (isChange && ['unit', 'autoUpdate', 'autoSync'].includes(ds.setting)) this.refreshSheet();
@@ -474,7 +491,10 @@ function workoutVolume(w, includeOpen) {
   return v;
 }
 function readinessScore(c) {
-  const s = Math.min(c.sleep, 9) / 8 * 25 + c.quality / 5 * 15 + (6 - c.soreness) / 5 * 20 + c.energy / 5 * 25 + (6 - c.stress) / 5 * 15;
+  let s = Math.min(c.sleep, 9) / 8 * 25 + c.quality / 5 * 15 + (6 - c.soreness) / 5 * 20 + c.energy / 5 * 25 + (6 - c.stress) / 5 * 15;
+  // Watch signals: resting HR well above your baseline, or HRV well below, both mean incomplete recovery
+  if (c.rhrDelta != null) s -= c.rhrDelta >= 7 ? 12 : c.rhrDelta >= 4 ? 6 : c.rhrDelta <= -3 ? -3 : 0;
+  if (c.hrvRatio != null) s -= c.hrvRatio < 0.8 ? 10 : c.hrvRatio < 0.9 ? 5 : c.hrvRatio > 1.1 ? -3 : 0;
   return Math.max(0, Math.min(100, Math.round(s)));
 }
 function readinessLabel(s) { return s >= 85 ? 'Primed. A good day to push for PRs.' : s >= 65 ? 'Good to train as planned.' : s >= 45 ? 'A bit flat. Stick to the plan, no heroics.' : 'Low. The coach will lighten today\'s targets.'; }
@@ -524,22 +544,39 @@ function weekStreak() {
   while (has(s, s + 7 * 864e5)) { n++; s -= 7 * 864e5; }
   return n;
 }
+// Convert every stored weight between kg and lb (workouts, active workout, measurements, settings)
+function convertUnits(from, to) {
+  const k = to === 'lb' ? 1 / 0.45359237 : 0.45359237, d = Store.data, s = d.settings;
+  const cw = v => (v === '' || v == null || isNaN(+v)) ? v : Math.round(+v * k * 10) / 10;
+  const fixSets = list => list.forEach(e => { const ex = Store.ex(e.exId); if (ex.type !== 'wr' && ex.type !== 'wbw') return; e.sets.forEach(st => { st.w = cw(st.w); if (st.p) st.p.w = cw(st.p.w); }); });
+  d.workouts.forEach(w => { fixSets(w.exercises); w.u = Date.now(); });
+  if (d.active) fixSets(d.active.exercises);
+  d.measurements.forEach(m => { if (m.weight) m.weight = cw(m.weight); m.u = Date.now(); });
+  s.unit = to; s.bodyweight = cw(s.bodyweight);
+  if (to === 'lb') { s.bar = 45; s.plates = [45, 35, 25, 10, 5, 2.5]; } else { s.bar = 20; s.plates = [25, 20, 15, 10, 5, 2.5, 1.25]; }
+  toast(`Converted to ${to}`);
+}
 function heatmap(ws) {
   const days = {}; ws.forEach(w => { const k = new Date(w.start).toDateString(); days[k] = (days[k] || 0) + 1; });
-  const weeks = 17, start = startOfWeek() - (weeks - 1) * 7 * 864e5;
-  let cells = '';
-  for (let c = 0; c < weeks; c++) for (let r = 0; r < 7; r++) {
-    const t = start + (c * 7 + r) * 864e5; if (t > Date.now()) continue;
-    const n = days[new Date(t).toDateString()] || 0;
-    cells += `<rect x="${c * 19}" y="${r * 19}" width="15" height="15" rx="3" class="hm${Math.min(n, 2)}"><title>${fmtDate(t)}: ${n} workout(s)</title></rect>`;
+  const weeks = 16, start = startOfWeek() - (weeks - 1) * 7 * 864e5, L = 18, T = 14;
+  let cells = '', lastMonth = -1;
+  ['M', '', 'W', '', 'F', '', 'S'].forEach((d, r) => { if (d) cells += `<text x="0" y="${T + r * 19 + 11}" class="axis">${d}</text>`; });
+  for (let c = 0; c < weeks; c++) {
+    const m = new Date(start + c * 7 * 864e5).getMonth();
+    if (m !== lastMonth) { cells += `<text x="${L + c * 19}" y="10" class="axis">${new Date(start + c * 7 * 864e5).toLocaleDateString(undefined, { month: 'short' })}</text>`; lastMonth = m; }
+    for (let r = 0; r < 7; r++) {
+      const t = start + (c * 7 + r) * 864e5; if (t > Date.now()) continue;
+      const n = days[new Date(t).toDateString()] || 0;
+      cells += `<rect x="${L + c * 19}" y="${T + r * 19}" width="15" height="15" rx="3" class="hm${Math.min(n, 2)}"><title>${fmtDate(t)}: ${n} workout(s)</title></rect>`;
+    }
   }
-  return `<svg viewBox="0 0 ${weeks * 19} ${7 * 19}" class="chart heat" role="img" aria-label="Workout calendar, last ${weeks} weeks">${cells}</svg>`;
+  return `<svg viewBox="0 0 ${L + weeks * 19} ${T + 7 * 19}" class="chart heat" role="img" aria-label="Workout calendar, last ${weeks} weeks">${cells}</svg>`;
 }
 function historyCard(w) {
   const mins = Math.round(((w.end || w.start) - w.start) / 60000);
   return `<button class="card hist" data-a="workoutDetail" data-id="${w.id}">
     <div class="row-between"><b>${esc(w.name)}</b><span class="sm muted">${fmtDate(w.start)}</span></div>
-    <div class="sm muted row wstats"><span>${icon('clock')} ${mins} min</span><span>${icon('weight')} ${fmtNum(workoutVolume(w))} ${U()}</span>${w.prs ? `<span class="acc">${icon('trophy')} ${w.prs} PR</span>` : ''}${w.imported ? `<span>${icon('file-import')} ${esc(w.imported)}</span>` : ''}</div>
+    <div class="sm muted row wstats"><span>${icon('clock')} ${mins} min</span><span>${icon('weight')} ${fmtNum(workoutVolume(w))} ${U()}</span>${w.prs ? `<span class="acc">${icon('trophy')} ${w.prs} PR</span>` : ''}${w.hr ? `<span>${icon('heart')} ${w.hr.avg} avg</span>` : ''}${w.imported ? `<span>${icon('file-import')} ${esc(w.imported)}</span>` : ''}</div>
     <div class="sm clamp">${w.exercises.map(e => `${e.sets.length}× ${esc(Store.ex(e.exId).name)}`).join(' · ')}</div></button>`;
 }
 function summaryBody(w, prs) {

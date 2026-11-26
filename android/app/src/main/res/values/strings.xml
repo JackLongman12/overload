@@ -4,4 +4,5 @@
     <string name="title_activity_main">Gym App</string>
     <string name="package_name">com.overload.gym</string>
     <string name="custom_url_scheme">com.overload.gym</string>
+    <string name="health_connect_privacy_policy_url">https://github.com/JackLongman12/overload/blob/main/PRIVACY.md</string>
 </resources>

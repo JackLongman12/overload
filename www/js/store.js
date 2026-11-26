@@ -20,7 +20,7 @@ const Store = {
       schema: 1,
       settings: {
         unit: 'kg', rest: 120, bar: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25], bodyweight: 75,
-        updateUrl: 'https://raw.githubusercontent.com/JackLongman12/overload/main/update.json', autoUpdate: true, autoSync: true, coachLevel: 'standard', weekGoal: 4, name: ''
+        updateUrl: 'https://raw.githubusercontent.com/JackLongman12/overload/main/update.json', autoUpdate: true, autoSync: true, keepAwake: true, coachLevel: 'standard', weekGoal: 4, name: ''
       },
       customExercises: [], routines: [], workouts: [], measurements: [], checkins: [], deleted: {},
       active: null, onboarded: false

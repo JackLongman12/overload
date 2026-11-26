@@ -37,6 +37,8 @@ const Actions = {
   },
   rDelete() { if (!confirm('Delete this routine? Your workout history is kept.')) return; Store.tombstone(this.draft.id); Store.data.routines = Store.data.routines.filter(r => r.id !== this.draft.id); Store.save(true); this.closeSheet(); },
   programs() { this.openPrograms(); },
+  toggleIns() { this._allIns = !this._allIns; this.render(); },
+  watchDemo(el, d) { openExternal('https://www.youtube.com/results?search_query=' + encodeURIComponent(Store.ex(d.id).name + ' exercise proper form')); },
   progGoal(el, d) { this.progGoal = d.id; this.refreshSheet(); },
   addProgram(el, d) {
     const p = PROGRAMS.find(x => x.id === d.id);
@@ -96,6 +98,7 @@ const Actions = {
       <button class="li" data-a="exOp" data-op="down" data-i="${i}">${icon('arrow-down')}<span>Move down</span></button>
       <button class="li" data-a="exOp" data-op="replace" data-i="${i}">${icon('replace')}<span>Replace exercise</span></button>
       <button class="li" data-a="exOp" data-op="warm" data-i="${i}">${icon('temperature')}<span>Add warm-up sets</span></button>
+      <button class="li" data-a="watchDemo" data-id="${e.exId}">${icon('brand-youtube')}<span>Watch how to do it</span></button>
       <button class="li danger" data-a="exOp" data-op="remove" data-i="${i}">${icon('trash')}<span>Remove exercise</span></button></div>`);
   },
   exOp(el, d) {
@@ -161,7 +164,7 @@ const Actions = {
     const m = { id: uid(), date: Date.now() };
     Object.entries(this.mdraft).forEach(([k, v]) => { if (v !== '' && v != null) m[k] = num(v); });
     if (Object.keys(m).length <= 2) return toast('Enter at least one value');
-    Store.data.measurements.push(m); if (m.weight) Store.data.settings.bodyweight = m.weight; Store.save(true); this.closeSheet(); toast('Measurements saved');
+    Store.data.measurements.push(m); if (m.weight) { Store.data.settings.bodyweight = m.weight; HC.saveWeight(m.weight, m.bodyfat); } Store.save(true); this.closeSheet(); toast('Measurements saved');
   },
   measureList() { this.openMeasureList(); },
   deleteMeasure(el, d) { Store.tombstone(d.id); Store.data.measurements = Store.data.measurements.filter(m => m.id !== d.id); Store.save(true); this.refreshSheet(); },
@@ -180,6 +183,57 @@ const Actions = {
   onboardDone() { Store.data.onboarded = true; Store.save(true); this.closeSheet(); },
   disclaimer() { this.openSheet('disclaimer', 'Health and safety', () => DISCLAIMER_HTML); },
   privacy() { const url = 'https://github.com/JackLongman12/overload/blob/main/PRIVACY.md'; const br = Plugin('Browser'); if (br) br.open({ url }); else window.open(url, '_blank'); },
+
+  // ----- AI rep counter
+  countReps(el, d) { this.openPose(+d.i); },
+  async aiInstall() {
+    this.aiBusy = 'Starting…'; this.refreshSheet();
+    try { await Pose.installPack(msg => { this.aiBusy = msg; const e = $('#aiBusy'); if (e) e.textContent = msg; }); this.aiBusy = null; this.refreshSheet(); }
+    catch (e) { this.aiBusy = null; this.aiErr = e.message; this.refreshSheet(); }
+  },
+  poseUse() {
+    const i = this.poseEx, a = Store.data.active, st = Pose.state;
+    if (!a || !st || !st.reps) return toast('No reps counted yet');
+    const e = a.exercises[i]; let s = e.sets.find(x => !x.done && x.type !== 'W') || e.sets.find(x => !x.done);
+    if (!s) { Actions.addSet.call(this, null, { i }); s = e.sets[e.sets.length - 1]; }
+    s.r = st.reps; Store.save();
+    Pose.stop(); this.closeSheet(); toast(st.reps + ' reps entered. Tap the check to complete the set.');
+  },
+  poseReset() { if (Pose.state) { Pose.state.reps = 0; Pose.state.phase = 'up'; Pose.state.cue = 'Start your set'; Pose.state.onUpdate(Pose.state); } },
+  async poseFlip() { Pose.facing = Pose.facing === 'user' ? 'environment' : 'user'; this.refreshSheet(); },
+  aiDelete() { const fs = Plugin('Filesystem'); if (fs) fs.rmdir({ path: 'ai', directory: 'DATA', recursive: true }).catch(() => { }); delete Store.data.settings.aiPack; Store.save(true); Pose.landmarker = null; toast('AI pack removed'); this.refreshSheet(); },
+
+  // ----- Devices
+  devices() { this.openDevices(); },
+  async hcConnect() { try { await HC.connect(); toast(HC.on ? 'Health Connect linked' : 'No permissions granted'); } catch (e) { toast(e.message); } this.refreshSheet(); },
+  async hcPull() { toast('Reading from Health Connect…'); const h = await HC.pull(); toast(h ? `Updated${h.imported ? ', ' + h.imported + ' watch workout(s) added' : ''}` : 'Not linked'); this.refreshSheet(); },
+  hcSettings() { if (HC.api) HC.api.openHealthConnectSettings().catch(() => { }); },
+  hcDisconnect() { HC.disconnect(); this.refreshSheet(); toast('Unlinked. To fully revoke access, use Health Connect settings.'); },
+  async scaleScan() {
+    this.scale = { status: 'scanning', reading: null };
+    this.refreshSheet();
+    try {
+      await BLE.scanScale(r => {
+        if (!r) { if (this.scale.status === 'scanning') this.scale.status = 'timeout'; this.refreshSheet(); return; }
+        this.scale.reading = r;
+        if (r.stable) { this.scale.status = 'done'; BLE.stopScan(); buzz([80]); }
+        const el = $('#scaleLive'); if (el) el.textContent = fmtW(Store.data.settings.unit === 'lb' ? Math.round(r.kg / 0.45359237 * 10) / 10 : r.kg);
+        if (r.stable) this.refreshSheet();
+      });
+    } catch (e) { this.scale = { status: 'error', err: e.message }; this.refreshSheet(); }
+  },
+  scaleStop() { BLE.stopScan(); this.scale = null; this.refreshSheet(); },
+  scaleSave() {
+    const r = this.scale && this.scale.reading; if (!r) return;
+    const w = Store.data.settings.unit === 'lb' ? Math.round(r.kg / 0.45359237 * 10) / 10 : Math.round(r.kg * 10) / 10;
+    const m = { id: uid(), date: Date.now(), weight: w, source: r.model };
+    if (r.impedance) m.impedance = r.impedance;
+    Store.data.measurements.push(m); Store.data.settings.bodyweight = w; Store.save(true);
+    HC.saveWeight(w);
+    this.scale = null; this.refreshSheet(); toast('Weight saved: ' + w + ' ' + U());
+  },
+  async hrConnect() { try { toast('Looking for heart-rate monitors…'); await BLE.connectHR(); toast('Heart-rate monitor connected'); } catch (e) { toast(e.message || 'No device selected'); } },
+  hrDisconnect() { BLE.disconnectHR(true); },
 
   // ----- Account and sync
   account() { this.authMode = this.authMode || 'signup'; this.openAccount(); },

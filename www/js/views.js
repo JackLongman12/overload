@@ -68,10 +68,19 @@ Object.assign(UI, {
 
   openCheckin(beforeWorkout) {
     this.ci = { sleep: 7, quality: 3, soreness: 2, energy: 3, stress: 2 };
+    const h = Store.data.health && Date.now() - Store.data.health.at < 6 * 3600e3 ? Store.data.health : null;
+    let watchNote = '';
+    if (h) {
+      if (h.sleepH) this.ci.sleep = Math.min(10, Math.max(3, Math.round(h.sleepH * 2) / 2));
+      if (h.rhr && h.rhr.base && h.rhr.fresh) this.ci.rhrDelta = h.rhr.latest - h.rhr.base;
+      if (h.hrv && h.hrv.base && h.hrv.fresh) this.ci.hrvRatio = h.hrv.latest / h.hrv.base;
+      watchNote = [h.sleepH ? `${h.sleepH} h sleep` : '', h.rhr ? `resting HR ${h.rhr.latest}${h.rhr.base ? ' (usual ' + h.rhr.base + ')' : ''}` : '', h.hrv ? `HRV ${h.hrv.latest} ms${h.hrv.base ? ' (usual ' + h.hrv.base + ')' : ''}` : ''].filter(Boolean).join(' · ');
+    } else if (HC.on) HC.pull().then(x => { if (x && this.top() && this.top().key === 'checkin') this.openCheckin(beforeWorkout); });
     const slider = (k, label, min, max, lo, hi, step = 1) => `<div class="ci"><div class="row-between"><span>${label}</span><b id="ci-${k}">${this.ci[k]}</b></div>
       <input type="range" min="${min}" max="${max}" step="${step}" value="${this.ci[k]}" data-ci="${k}" aria-label="${label}"><div class="row-between sm muted"><span>${lo}</span><span>${hi}</span></div></div>`;
     this.openSheet('checkin', 'Readiness check-in', () => `
       <p class="sm muted">30 seconds. The coach uses this to scale today's sets and weights.</p>
+      ${watchNote ? `<div class="card sm">${icon('device-watch')} From your watch: ${esc(watchNote)}. These are already included in the score.</div>` : ''}
       ${slider('sleep', 'Sleep (hours)', 3, 10, '3h', '10h', 0.5)}${slider('quality', 'Sleep quality', 1, 5, 'Poor', 'Great')}
       ${slider('soreness', 'Muscle soreness', 1, 5, 'None', 'Very sore')}${slider('energy', 'Energy', 1, 5, 'Drained', 'Wired')}
       ${slider('stress', 'Stress', 1, 5, 'Calm', 'High')}
@@ -91,6 +100,69 @@ Object.assign(UI, {
       </div>
       ${DISCLAIMER_HTML}
       <button class="btn primary wide" data-a="onboardDone">I understand, let's train</button>`);
+  },
+
+  openPose(i) {
+    this.poseEx = i; this.aiErr = null;
+    const e = Store.data.active.exercises[i], ex = Store.ex(e.exId), mode = Pose.modeFor(ex);
+    this.openSheet('pose', 'Rep counter', () => {
+      if (Pose.isNative() && Store.data.settings.aiPack !== AI_PACK.version) {
+        return `<div class="celebrate">${icon('camera')}<h2>Count reps with the camera</h2></div>
+          <div class="card sm">Gym App uses an AI pose model that runs entirely on your phone. Video is never saved or uploaded. It counts reps and checks squat depth and push-up hip position.</div>
+          <div class="card sm">It needs a one-time download of about ${AI_PACK.sizeMB} MB (Google's MediaPipe engine and pose model). Each file is checked against a fingerprint built into the app before it's used. Wi-Fi recommended.</div>
+          ${this.aiErr ? `<div class="card warn-card sm">${esc(this.aiErr)}</div>` : ''}
+          ${this.aiBusy ? `<div class="center sm" id="aiBusy">${esc(this.aiBusy)}</div>` : `<button class="btn primary wide" data-a="aiInstall">${icon('download')} Download AI pack</button>`}`;
+      }
+      return `<div class="pose-wrap"><video id="poseVideo" playsinline muted></video><canvas id="poseCanvas"></canvas>
+          <div class="pose-count"><span id="poseReps">0</span><small>reps</small></div><div class="pose-angle">${esc(mode.label)} <span id="poseAngle">–</span></div></div>
+        <div class="card center" id="poseCue">Loading the AI model…</div>
+        <div class="grid3"><button class="btn" data-a="poseReset">${icon('refresh')} Reset</button><button class="btn" data-a="poseFlip">${icon('camera-rotate')} Flip</button><button class="btn primary" data-a="poseUse">${icon('check')} Use</button></div>
+        <p class="sm muted">Tip: prop the phone up side-on, 2–3 m away, so your whole body is visible. Tracking ${esc(mode.label.toLowerCase())} angle for ${esc(ex.name)}.</p>
+        ${Pose.isNative() ? `<button class="link sm" data-a="aiDelete">Remove AI pack (frees ${AI_PACK.sizeMB} MB)</button>` : ''}`;
+    }, {
+      mount: () => {
+        const v = $('#poseVideo'), c = $('#poseCanvas'); if (!v) return;
+        Pose.start(v, c, ex, st => { const r = $('#poseReps'); if (r) r.textContent = st.reps; const q = $('#poseCue'); if (q) q.textContent = st.cue; })
+          .then(() => { const q = $('#poseCue'); if (q && q.textContent.startsWith('Loading')) q.textContent = 'Get your whole body in frame, side-on to the camera'; })
+          .catch(err => { const q = $('#poseCue'); if (q) q.textContent = (err && err.name === 'NotAllowedError') ? 'Camera permission was denied. Allow it in Android settings, Apps, Gym App.' : "Couldn't start the camera or AI model: " + (err.message || err); });
+      },
+      onClose: () => Pose.stop()
+    });
+  },
+
+  openDevices() {
+    this.openSheet('devices', 'Watches, scales and sensors', () => {
+      const h = Store.data.health, sc = this.scale, s = Store.data.settings;
+      const native = !!Cap();
+      return `${native ? '' : '<div class="card warn-card sm">Device connections work in the Android app. This browser preview can only show the screens.</div>'}
+      <div class="section-head"><h3>${icon('device-watch')} Smartwatches</h3><span class="sm muted">via Health Connect</span></div>
+      <div class="card">
+        ${HC.on ? `<div class="li static"><span>Status</span><span class="sm acc">${icon('check')} Linked</span></div>
+          ${h ? `<div class="li static"><span>Last read</span><span class="sm muted">${fmtTime(h.at)}${h.steps ? ' · ' + fmtNum(h.steps) + ' steps' : ''}${h.sleepH ? ' · ' + h.sleepH + ' h sleep' : ''}${h.rhr ? ' · RHR ' + h.rhr.latest : ''}</span></div>` : ''}
+          <div class="grid2" style="margin-top:8px"><button class="btn sm" data-a="hcPull">${icon('refresh')} Read now</button><button class="btn sm" data-a="hcSettings">${icon('settings')} Permissions</button></div>
+          <button class="btn sm ghost wide" data-a="hcDisconnect">Unlink</button>`
+        : `<p class="sm">Link Health Connect to use your watch's data. Sleep, resting heart rate and HRV feed the readiness score. Weight and body fat appear in measurements. Runs, rides and swims recorded on the watch show up in your history, and heart rate is added to your workouts.</p>
+          <button class="btn primary wide" data-a="hcConnect">${icon('link')} Link Health Connect</button>`}
+        <details class="sm muted"><summary>Which watches work?</summary>
+          <p><b>Samsung Galaxy Watch:</b> Samsung Health, Settings, Health Connect, then allow sharing.<br><b>Pixel Watch and Fitbit:</b> the Fitbit app syncs to Health Connect.<br><b>Xiaomi and Redmi:</b> Mi Fitness, Profile, Health Connect.<br><b>Amazfit:</b> Zepp app, Profile, Add accounts, Health Connect.<br><b>Garmin:</b> Garmin Connect, Settings, Health Connect.<br><b>Honor and Huawei:</b> depends on model and region. If your watch can broadcast heart rate, use the heart-rate section below.<br><b>Apple Watch:</b> not possible. It only pairs with iPhone.</p></details>
+      </div>
+      <div class="section-head"><h3>${icon('scale')} Smart scale</h3><span class="sm muted">Bluetooth</span></div>
+      <div class="card">
+        ${!sc ? `<p class="sm">Works with Xiaomi Mi Smart Scale and Mi Body Composition Scale (1 and 2). Tap the button, then step on the scale barefoot.</p><button class="btn primary wide" data-a="scaleScan">${icon('scale')} Weigh in</button>` : ''}
+        ${sc && sc.status === 'scanning' ? `<div class="center"><div class="big"><span id="scaleLive">${sc.reading ? fmtW(sc.reading.kg) : '–'}</span> <span class="sm muted">${U()}</span></div><p class="sm muted">Step on the scale and stand still…</p><button class="btn sm" data-a="scaleStop">Cancel</button></div>` : ''}
+        ${sc && sc.status === 'done' ? `<div class="center"><div class="big">${fmtW(s.unit === 'lb' ? Math.round(sc.reading.kg / 0.45359237 * 10) / 10 : Math.round(sc.reading.kg * 10) / 10)} <span class="sm muted">${U()}</span></div><p class="sm muted">${esc(sc.reading.model)}${sc.reading.impedance ? ' · impedance ' + sc.reading.impedance + ' Ω' : ''}</p>
+          <div class="grid2"><button class="btn primary" data-a="scaleSave">Save</button><button class="btn" data-a="scaleStop">Discard</button></div></div>` : ''}
+        ${sc && sc.status === 'timeout' ? `<p class="sm warn">No scale found. Make sure Bluetooth is on and step on the scale so it wakes up.</p><button class="btn wide" data-a="scaleScan">Try again</button>` : ''}
+        ${sc && sc.status === 'error' ? `<p class="sm warn">${esc(sc.err)}</p><button class="btn wide" data-a="scaleScan">Try again</button>` : ''}
+        <p class="sm muted">Other scales (Withings, Renpho, Eufy and others) sync through their own app into Health Connect.</p>
+      </div>
+      <div class="section-head"><h3>${icon('heart')} Live heart rate</h3><span class="sm muted">Bluetooth</span></div>
+      <div class="card">
+        ${BLE.hrDevice ? `<div class="li static"><span>${esc(BLE.hrDevice.name || s.hrName || 'Monitor')}</span><b><span class="hrLive">${BLE.hr || '–'}</span> bpm</b></div><button class="btn wide" data-a="hrDisconnect">Disconnect and forget</button>`
+        : `<p class="sm">Chest straps (Polar, Garmin HRM, Wahoo, Coros) and watches with heart-rate broadcast (Garmin, Amazfit, Huawei, Honor) show live heart rate during workouts and timers. The app reconnects automatically when you start a workout.</p>
+          ${s.hrDeviceId ? `<p class="sm muted">Remembered: ${esc(s.hrName || 'monitor')}</p>` : ''}<button class="btn primary wide" data-a="hrConnect">${icon('bluetooth')} Connect heart-rate monitor</button>`}
+      </div>`;
+    }, { onClose: () => { if (this.scale) { BLE.stopScan(); this.scale = null; } } });
   },
 
   openAccount() {
@@ -179,6 +251,7 @@ Object.assign(UI, {
     this.openSheet('exdetail', esc(ex.name), () => `
       <div class="chips"><span class="chip">${MUSCLES[ex.muscle] || ex.muscle}</span>${(ex.secondary || []).map(m => `<span class="chip ghost">${MUSCLES[m] || m}</span>`).join('')}<span class="chip ghost">${ex.equipment}</span>${ladder ? `<span class="chip ghost">${icon('stairs-up')} ${esc(ladder.name)}</span>` : ''}</div>
       <div class="coach ${sug.kind}"><div class="coach-head">${icon('sparkles')}<b>${esc(sug.title)}</b></div><div class="sm">${esc(sug.text)}</div></div>
+      <button class="btn wide" data-a="watchDemo" data-id="${id}">${icon('brand-youtube')} Watch how to do it</button>
       ${(ex.type === 'wr' || ex.type === 'wbw') && hist.length ? `<div class="stats3"><div class="stat"><div class="muted sm">Heaviest</div><b>${fmtW(b.w)}</b></div><div class="stat"><div class="muted sm">Best e1RM</div><b>${Math.round(b.e1)}</b></div><div class="stat"><div class="muted sm">Best set vol.</div><b>${fmtNum(b.vol)}</b></div></div>` : ''}
       ${charts}
       ${best ? `<div class="card"><b>Rep max estimates</b><div class="rm-grid">${[1, 2, 3, 5, 8, 10, 12, 15].map(r => `<div><span class="muted sm">${r}RM</span><b>${fmtW(Coach.roundW(best / (1 + (r === 1 ? 0 : r / 30))))}</b></div>`).join('')}</div></div>` : ''}
@@ -191,6 +264,7 @@ Object.assign(UI, {
     this.openSheet('wdetail', esc(w.name), () => `
       <div class="muted sm">${fmtDate(w.start, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${fmtTime(w.start)}</div>
       <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${Math.round(((w.end || w.start) - w.start) / 60000)} min</b></div><div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div><div class="stat"><div class="muted sm">Sets</div><b>${w.exercises.reduce((a, e) => a + e.sets.length, 0)}</b></div></div>
+      ${w.hr ? `<div class="card sm">${icon('heart')} Heart rate: ${w.hr.avg} bpm average, ${w.hr.max} max</div>` : ''}
       ${w.notes ? `<div class="card sm">${esc(w.notes)}</div>` : ''}
       ${w.exercises.map(e => { const ex = Store.ex(e.exId); let n = 0; return `<div class="card"><button class="ex-title" data-a="exDetail" data-id="${e.exId}">${esc(ex.name)}</button>${e.notes ? `<div class="sm muted">${esc(e.notes)}</div>` : ''}
         ${e.sets.map(s => `<div class="sm set-line"><span class="set-type t-${s.type || 'N'} mini">${(s.type || 'N') === 'N' ? ++n : s.type}</span>${prevText(ex, s)}${s.rpe ? ' @ RPE ' + s.rpe : ''}</div>`).join('')}</div>`; }).join('')}
@@ -314,6 +388,7 @@ Object.assign(UI, {
         <label class="field">Bar weight (${s.unit})<input inputmode="decimal" data-setting="bar" value="${s.bar}"></label>
         <label class="field">Body weight (${s.unit})<input inputmode="decimal" data-setting="bodyweight" value="${s.bodyweight}"></label>
       </div>
+      <label class="field row"><input type="checkbox" data-setting="keepAwake" ${s.keepAwake !== false ? 'checked' : ''}> Keep the screen on during workouts and timers</label>
       <label class="field">Available plates (${s.unit}, comma separated)<input data-setting="plates" value="${s.plates.join(', ')}"></label>
       <button class="btn wide" data-a="updates">${icon('refresh')} App updates</button>`);
   },
