@@ -124,3 +124,24 @@ function resizeImage(file, max = 640) {
     r.onerror = rej; r.readAsDataURL(file);
   });
 }
+
+// ---- Local error log: crashes and failed actions are recorded on the phone only, and can be exported
+const ErrorLog = {
+  KEY: 'gymapp.errors.v1', MAX: 100,
+  list() { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch (e) { return []; } },
+  add(kind, msg, stack) {
+    const l = this.list();
+    l.push({ t: Date.now(), kind, msg: String(msg || 'Unknown error').slice(0, 500), stack: String(stack || '').slice(0, 2000), ver: typeof Updater !== 'undefined' ? Updater.bundleVersion : '' });
+    while (l.length > this.MAX) l.shift();
+    try { localStorage.setItem(this.KEY, JSON.stringify(l)); } catch (e) { }
+  },
+  clear() { try { localStorage.removeItem(this.KEY); } catch (e) { } },
+  text() {
+    const head = `Gym App error log\nApp ${typeof Updater !== 'undefined' ? Updater.bundleVersion + ' / native ' + (Updater.nativeVersion || 'browser') : ''}\n${typeof navigator !== 'undefined' ? navigator.userAgent : ''}\n\n`;
+    return head + this.list().map(e => `[${new Date(e.t).toISOString()}] ${e.kind} (v${e.ver}): ${e.msg}\n${e.stack}`).join('\n\n');
+  }
+};
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('error', e => ErrorLog.add('error', e.message, e.error && e.error.stack));
+  window.addEventListener('unhandledrejection', e => ErrorLog.add('promise', e.reason && (e.reason.message || e.reason), e.reason && e.reason.stack));
+}

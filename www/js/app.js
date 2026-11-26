@@ -398,7 +398,10 @@ const UI = {
   bind() {
     document.addEventListener('click', e => {
       const t = e.target.closest('[data-a]'); if (!t) return;
-      const fn = Actions[t.dataset.a]; if (fn) { e.preventDefault(); fn.call(this, t, t.dataset); }
+      const fn = Actions[t.dataset.a]; if (!fn) return;
+      e.preventDefault();
+      const fail = err => { ErrorLog.add('action:' + t.dataset.a, err && err.message, err && err.stack); toast('Something went wrong. It was saved to the error log.'); };
+      try { const r = fn.call(this, t, t.dataset); if (r && r.catch) r.catch(fail); } catch (err) { fail(err); }
     });
     document.addEventListener('change', e => {
       const t = e.target;

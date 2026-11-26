@@ -169,16 +169,18 @@ Object.assign(UI, {
     this.openSheet('account', 'Account and sync', () => {
       const a = Sync.acct;
       if (!a || !a.token) {
-        const up = this.authMode === 'signup';
-        return `<div class="card sm">${icon('lock')} <b>End-to-end encrypted.</b> Your password never leaves this phone. It scrambles your data before upload, so the server, and anyone with access to it, can't read your workouts or photos.</div>
-        <div class="chips"><button class="chip ${up ? 'on' : ''}" data-a="authMode" data-id="signup">Create account</button><button class="chip ${!up ? 'on' : ''}" data-a="authMode" data-id="login">Log in</button></div>
+        const mode = this.authMode, up = mode === 'signup', rec = mode === 'recover';
+        return `<div class="card sm">${icon('lock')} <b>End-to-end encrypted.</b> Your password never leaves this phone. Data is encrypted before upload, so the server, and anyone with access to it, can't read your workouts or photos.</div>
+        <div class="chips"><button class="chip ${up ? 'on' : ''}" data-a="authMode" data-id="signup">Create account</button><button class="chip ${mode === 'login' ? 'on' : ''}" data-a="authMode" data-id="login">Log in</button><button class="chip ${rec ? 'on' : ''}" data-a="authMode" data-id="recover">Forgot password</button></div>
         ${a && !a.token ? `<div class="card warn-card sm">You were signed out on this device. Log in again as ${esc(a.email)}.</div>` : ''}
         <label class="field">Email<input id="authEmail" type="email" autocomplete="email" value="${esc(a ? a.email : '')}" placeholder="you@example.com"></label>
-        <label class="field">Password<input id="authPw" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="At least 10 characters"></label>
-        ${up ? '<label class="field">Confirm password<input id="authPw2" type="password" autocomplete="new-password"></label>' : ''}
+        ${rec ? '<label class="field">Recovery key<input id="authCode" autocapitalize="characters" autocomplete="off" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></label>' : ''}
+        <label class="field">${rec ? 'New password' : 'Password'}<input id="authPw" type="password" autocomplete="${up || rec ? 'new-password' : 'current-password'}" placeholder="At least 10 characters"></label>
+        ${up || rec ? `<label class="field">Confirm ${rec ? 'new ' : ''}password<input id="authPw2" type="password" autocomplete="new-password"></label>` : ''}
         ${this.authErr ? `<div class="sm" style="color:var(--bad);margin-bottom:10px">${esc(this.authErr)}</div>` : ''}
-        <button class="btn primary wide" data-a="authSubmit">${this.authBusy ? 'Working…' : up ? 'Create account and sync' : 'Log in and sync'}</button>
-        ${up ? `<div class="card warn-card sm"><b>Write your password down.</b> Because only you hold the key, a forgotten password can't be reset, and the cloud copy can't be recovered. Data on your phones is never affected.</div>` : ''}
+        <button class="btn primary wide" data-a="authSubmit">${this.authBusy ? 'Working…' : up ? 'Create account and sync' : rec ? 'Reset password and sync' : 'Log in and sync'}</button>
+        ${up ? `<p class="sm muted">After creating your account you'll get a recovery key. It's the only way back in if you forget your password.</p>` : ''}
+        ${rec ? `<p class="sm muted">Your recovery key was shown when you created your account. Without it a forgotten password can't be reset, because only you hold the keys.</p>` : ''}
         <p class="sm muted">Sync is optional. Without an account everything still works offline on this phone.</p>`;
       }
       const snaps = this.snaps;
@@ -192,9 +194,20 @@ Object.assign(UI, {
       <p class="sm muted">The server keeps a daily snapshot for the last 14 days.</p>
       ${snaps ? (snaps.length ? `<div class="card list">${snaps.map(s => `<div class="li static"><span>${fmtDate(s.created, { weekday: 'short', day: 'numeric', month: 'short' })} ${fmtTime(s.created)}<span class="sm muted"> · ${Math.max(1, Math.round(s.size / 1024))} KB</span></span><button class="btn sm" data-a="restoreSnap" data-id="${s.id}">Restore</button></div>`).join('')}</div>` : '<div class="empty">The first backup appears a day after you start syncing.</div>') : ''}
       <div class="section-head"><h3>Account</h3></div>
+      ${a.hasRecovery ? `<div class="card sm">${icon('key')} Recovery key is set. <button class="link sm" data-a="makeRecovery">Make a new one</button></div>` : `<div class="card warn-card sm"><b>No recovery key yet.</b> Without one, a forgotten password means your cloud copy is lost.<button class="btn sm primary wide" style="margin-top:8px" data-a="makeRecovery">${icon('key')} Create recovery key</button></div>`}
+      <button class="btn wide" data-a="changePwSheet">${icon('lock')} Change password</button>
       <button class="btn wide" data-a="signOut">${icon('logout')} Sign out</button>
       <button class="btn wide danger-ghost" data-a="deleteAccount">${icon('trash')} Delete account and cloud data</button>`;
     });
+  },
+
+  showRecoveryCode(code) {
+    this.recCode = code;
+    this.openSheet('reccode', 'Your recovery key', () => `<div class="celebrate">${icon('key')}<h2>Save this recovery key</h2></div>
+      <div class="card center"><div class="reccode">${esc(this.recCode)}</div></div>
+      <div class="card warn-card sm">This is the only way to get back into your account if you forget your password. It's shown once. Store it in a password manager, or write it down and keep it somewhere safe. Anyone with it and your email can reset your password.</div>
+      <button class="btn wide" data-a="copyRecovery">${icon('copy')} Copy</button>
+      <button class="btn primary wide" data-a="savedRecovery">I've saved it</button>`);
   },
 
   openPrograms() {
@@ -390,7 +403,8 @@ Object.assign(UI, {
       </div>
       <label class="field row"><input type="checkbox" data-setting="keepAwake" ${s.keepAwake !== false ? 'checked' : ''}> Keep the screen on during workouts and timers</label>
       <label class="field">Available plates (${s.unit}, comma separated)<input data-setting="plates" value="${s.plates.join(', ')}"></label>
-      <button class="btn wide" data-a="updates">${icon('refresh')} App updates</button>`);
+      <button class="btn wide" data-a="updates">${icon('refresh')} App updates</button>
+      <button class="btn wide" data-a="errorLog">${icon('bug')} Error log (${ErrorLog.list().length})</button>`);
   },
 
   openUpdates() {

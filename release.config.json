@@ -2,5 +2,5 @@
   "repo": "JackLongman12/overload",
   "apkVersionCode": 4,
   "apkVersionName": "1.4.0",
-  "notes": "Watches via Health Connect (sleep, resting HR and HRV feed readiness, weight sync, watch workouts imported), Xiaomi Bluetooth scale, live heart rate from straps and watches, on-device AI camera rep counter with form cues, coach fixes, unit conversion, screen stays on during workouts, exercise demo videos."
+  "notes": "Error log, automated tests, sync split into chunks (no size limit), recovery key, password reset and change."
 }

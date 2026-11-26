@@ -203,6 +203,18 @@ const Actions = {
   async poseFlip() { Pose.facing = Pose.facing === 'user' ? 'environment' : 'user'; this.refreshSheet(); },
   aiDelete() { const fs = Plugin('Filesystem'); if (fs) fs.rmdir({ path: 'ai', directory: 'DATA', recursive: true }).catch(() => { }); delete Store.data.settings.aiPack; Store.save(true); Pose.landmarker = null; toast('AI pack removed'); this.refreshSheet(); },
 
+  // ----- Error log
+  errorLog() {
+    this.openSheet('errors', 'Error log', () => {
+      const l = ErrorLog.list().slice().reverse();
+      return `<p class="sm muted">Errors are recorded on this phone only. If something breaks, share this log so it can be fixed.</p>
+        <div class="grid2"><button class="btn primary" data-a="errorShare">${icon('share')} Share log</button><button class="btn" data-a="errorClear">${icon('trash')} Clear</button></div>
+        ${l.length ? l.map(e => `<div class="card sm"><div class="row-between"><b>${esc(e.kind)}</b><span class="muted">${fmtDate(e.t, { day: 'numeric', month: 'short' })} ${fmtTime(e.t)}</span></div><div>${esc(e.msg)}</div>${e.stack ? `<details><summary>Details</summary><pre class="stack">${esc(e.stack)}</pre></details>` : ''}</div>`).join('') : '<div class="empty">No errors recorded.</div>'}`;
+    });
+  },
+  errorShare() { download(`gym-app-errors-${new Date().toISOString().slice(0, 10)}.txt`, ErrorLog.text()); },
+  errorClear() { ErrorLog.clear(); this.refreshSheet(); },
+
   // ----- Devices
   devices() { this.openDevices(); },
   async hcConnect() { try { await HC.connect(); toast(HC.on ? 'Health Connect linked' : 'No permissions granted'); } catch (e) { toast(e.message); } this.refreshSheet(); },
@@ -239,15 +251,45 @@ const Actions = {
   account() { this.authMode = this.authMode || 'signup'; this.openAccount(); },
   authMode(el, d) { this.authMode = d.id; this.authErr = ''; this.refreshSheet(); },
   async authSubmit() {
-    const email = ($('#authEmail') || {}).value || '', pw = ($('#authPw') || {}).value || '', pw2 = ($('#authPw2') || {}).value;
+    const email = ($('#authEmail') || {}).value || '', pw = ($('#authPw') || {}).value || '', pw2 = ($('#authPw2') || {}).value, code = ($('#authCode') || {}).value || '';
+    const mode = this.authMode;
     const fail = m => { this.authErr = m; this.refreshSheet(); };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return fail('Enter a valid email address.');
+    if (mode === 'recover' && code.replace(/[^A-Za-z0-9]/g, '').length !== 25) return fail('Enter the 25-character recovery key.');
     if (pw.length < 10) return fail('Use a password of at least 10 characters.');
-    if (this.authMode === 'signup' && pw !== pw2) return fail("The passwords don't match.");
+    if (mode !== 'login' && pw !== pw2) return fail("The passwords don't match.");
     this.authBusy = true; this.authErr = ''; this.refreshSheet();
-    try { if (this.authMode === 'signup') await Sync.signup(email, pw); else await Sync.login(email, pw); toast(this.authMode === 'signup' ? 'Account created. Sync is on.' : 'Logged in. Your data is syncing.'); }
-    catch (e) { this.authErr = e.message; }
+    try {
+      if (mode === 'signup') { const rc = await Sync.signup(email, pw); this.showRecoveryCode(rc); }
+      else if (mode === 'recover') { await Sync.recover(email, code, pw); toast('Password reset. You were signed out on your other devices.'); }
+      else { await Sync.login(email, pw); toast('Logged in. Your data is syncing.'); }
+    } catch (e) { this.authErr = e.message; }
     this.authBusy = false; this.refreshSheet();
+  },
+  async makeRecovery() {
+    if (Sync.acct.hasRecovery && !confirm('Make a new recovery key? The old one will stop working.')) return;
+    try { this.showRecoveryCode(await Sync.createRecovery()); } catch (e) { toast(e.message); }
+  },
+  copyRecovery() { const c = this.recCode; if (navigator.clipboard) navigator.clipboard.writeText(c).then(() => toast('Copied. Store it somewhere safe.')).catch(() => toast('Copy failed. Write it down.')); },
+  savedRecovery() { this.recCode = null; this.closeSheet(); toast('Recovery key set'); },
+  async changePw() {
+    const cur = ($('#pwCur') || {}).value || '', n1 = ($('#pwNew') || {}).value || '', n2 = ($('#pwNew2') || {}).value || '';
+    const fail = m => { this.pwErr = m; this.refreshSheet(); };
+    if (n1.length < 10) return fail('Use a new password of at least 10 characters.');
+    if (n1 !== n2) return fail("The new passwords don't match.");
+    this.pwBusy = true; this.pwErr = ''; this.refreshSheet();
+    try { await Sync.changePassword(cur, n1); this.pwBusy = false; this.closeSheet(); toast('Password changed. Other devices were signed out.'); }
+    catch (e) { this.pwBusy = false; fail(e.message); }
+  },
+  changePwSheet() {
+    this.pwErr = '';
+    this.openSheet('pw', 'Change password', () => `
+      <label class="field">Current password<input id="pwCur" type="password" autocomplete="current-password"></label>
+      <label class="field">New password<input id="pwNew" type="password" autocomplete="new-password" placeholder="At least 10 characters"></label>
+      <label class="field">Confirm new password<input id="pwNew2" type="password" autocomplete="new-password"></label>
+      ${this.pwErr ? `<div class="sm" style="color:var(--bad);margin-bottom:10px">${esc(this.pwErr)}</div>` : ''}
+      <button class="btn primary wide" data-a="changePw">${this.pwBusy ? 'Working…' : 'Change password'}</button>
+      <p class="sm muted">Your data stays encrypted with the same key, so nothing needs to re-upload. Other phones will need to log in again.</p>`);
   },
   syncNow() { Sync.run('manual'); },
   async loadSnapshots() { try { this.snaps = await Sync.snapshots(); } catch (e) { toast(e.message); this.snaps = []; } this.refreshSheet(); },
