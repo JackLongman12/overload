@@ -1,6 +1,6 @@
 {
   "repo": "JackLongman12/overload",
-  "apkVersionCode": 5,
-  "apkVersionName": "1.8.0",
-  "notes": "Home-screen widget and Wear OS watch app (current set, rest countdown, complete set from your wrist), plus everything since 1.4: tests, error log, recovery key, program builder, training blocks, live RPE, body map, achievements, PDF reports, reminders, light theme."
+  "apkVersionCode": 6,
+  "apkVersionName": "1.9.0",
+  "notes": "Clear directions for every exercise, program and timer; searchable, grouped exercise lists. 30 new climbing exercises, V/Font and YDS/French grades, climb results and wall angles, grade pyramid, flash grade and finger-strength stats, 3 climbing programs. Sleep from Samsung Health and Sleep as Android fills in the check-in (no double counting). Fixed a stray scrollbar."
 }

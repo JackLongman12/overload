@@ -25,6 +25,7 @@ const Coach = {
 
   defaultTarget(ex) {
     if (ex.type === 'dur') return { sets: 3, repMin: 30, repMax: 60 };
+    if (ex.type === 'wdur') return { sets: 5, repMin: 7, repMax: 10 };
     if (ex.type === 'dist' || ex.type === 'climb') return { sets: 1, repMin: 0, repMax: 0 };
     if (ex.type === 'bw') return { sets: 3, repMin: 8, repMax: 15 };
     return ex.compound ? { sets: 3, repMin: 6, repMax: 10 } : { sets: 3, repMin: 10, repMax: 15 };
@@ -62,6 +63,7 @@ const Coach = {
     if (ex.type === 'dur') s = this.suggestDuration(ex, t, hist);
     else if (ex.type === 'dist') s = this.suggestDistance(ex, t, hist);
     else if (ex.type === 'climb') s = this.suggestClimb(ex, hist);
+    else if (ex.type === 'wdur') s = Climb.suggestHold(ex, t, hist);
     else if (ex.type === 'bw') s = this.suggestBodyweight(ex, t, hist);
     else s = this.suggestLoaded(ex, t, hist);
 
@@ -71,8 +73,10 @@ const Coach = {
     if (ready != null && s.sets && s.sets.length && hist.length) {
       if (ready < 45) {
         s.sets = s.sets.slice(0, Math.max(1, s.sets.length - 1));
-        if (ex.type === 'wr' || ex.type === 'wbw') s.sets = s.sets.map(x => ({ ...x, w: x.w ? this.roundW(x.w * 0.92, ex) : x.w }));
-        s.text += ` Readiness is low (${ready}), so today is lighter: one set fewer and about 8% less weight.`;
+        const loaded = ex.type === 'wr' || ex.type === 'wbw' || ex.type === 'wdur';
+        if (loaded) s.sets = s.sets.map(x => ({ ...x, w: x.w ? this.roundW(x.w * 0.92, ex) : x.w }));
+        s.text += ex.type === 'climb' ? ` Readiness is low (${ready}), so the hardest attempt is dropped today.`
+          : ` Readiness is low (${ready}), so today is lighter: one set fewer${loaded ? ' and about 8% less weight' : ''}.`;
         s.tag = 'light day';
       } else if (ready >= 85 && s.kind === 'reps') {
         s.text += ` Readiness is high (${ready}). If the first set flies, take the weight jump now.`;
@@ -202,6 +206,7 @@ const Coach = {
   },
 
   suggestClimb(ex, hist) {
+    if (typeof Climb !== 'undefined') return Climb.suggest(ex, hist);
     if (!hist.length) return { kind: 'new', title: 'First session', tag: 'new', text: 'Log each climb with its grade and whether you sent it. The coach will pick your next project grade.', sets: [{ g: '', a: 1, sent: false }] };
     const all = hist.slice(0, 4).flatMap(h => h.sets).filter(s => s.sent && s.g);
     const scale = ex.id === 'bouldering' ? CLIMB_GRADES.boulder : CLIMB_GRADES.route;

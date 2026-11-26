@@ -20,7 +20,11 @@ const UI = {
     const app = Plugin('App');
     if (app) {
       app.addListener('backButton', () => this.back());
-      app.addListener('resume', () => { this.tick(); Sync.schedule(800); });
+      app.addListener('resume', () => {
+        this.tick(); Sync.schedule(800);
+        // Fresh sleep and heart data each time you come back (for example after Sleep as Android's alarm)
+        if (HC.on && Date.now() - ((Store.data.health || {}).at || 0) > 20 * 60e3) HC.pull().then(() => { if (!this.stack.length) this.render(); else if (this.top().key === 'checkin' && !this._ciTouched) this.openCheckin(this._ciBefore); });
+      });
     }
     if (!Store.data.onboarded) this.openWelcome();
     else if (Store.data.active) toast('Workout in progress. Tap the banner to resume.');
@@ -108,7 +112,7 @@ const UI = {
     <div class="card">
       <div class="row-between"><div><div class="muted sm">Readiness today</div>
       ${ci ? `<div class="big">${ci.score}<span class="muted sm"> / 100</span></div><div class="sm muted">${readinessLabel(ci.score)}</div>` : `<div class="sm">Check in so the coach can adjust today's targets.</div>`}</div>
-      ${d.health && d.health.steps ? `<div class="sm muted">${icon('shoe')} ${fmtNum(d.health.steps)} steps today${d.health.sleepH ? ' · ' + d.health.sleepH + ' h sleep' : ''}</div>` : ''}
+      ${d.health && (d.health.steps || d.health.sleepH) ? `<div class="sm muted">${d.health.steps ? `${icon('shoe')} ${fmtNum(d.health.steps)} steps today` : ''}${d.health.sleepH ? `${d.health.steps ? ' · ' : ''}${icon('moon')} ${d.health.sleepH} h sleep${d.health.sleep ? ' (' + esc(d.health.sleep.source) + ')' : ''}` : ''}</div>` : ''}
       <button class="btn ${ci ? '' : 'primary'}" data-a="checkin">${icon('heart-rate-monitor')} ${ci ? 'Redo' : 'Check in'}</button></div>
     </div>
     ${(() => { const b = Plan.block(); if (!b) return ''; return b.done
@@ -191,6 +195,7 @@ const UI = {
     <div class="card"><b>Consistency</b>${heatmap(ws)}</div>
     <div class="card"><b>Sets per muscle, last 30 days</b>
       ${mList.length ? mList.map(([m, v]) => `<div class="hbar"><span>${MUSCLES[m] || m}</span><div><div style="width:${v / mMax * 100}%"></div></div><span>${v}</span></div>`).join('') : '<div class="empty-chart">No data yet</div>'}</div>
+    ${Climb.climbs(365).length ? (() => { const b = Climb.stats('boulder', 90), r = Climb.stats('route', 90); return `<button class="card accent-card" data-a="climbStats">${icon('mountain')}<div><b>Climbing stats</b><div class="sm">${[b && b.max != null ? 'Boulder ' + Climb.label(b.max, 'boulder') : '', r && r.max != null ? 'Route ' + Climb.label(r.max, 'route') : ''].filter(Boolean).join(' · ') || 'Grade pyramid, flash grade, send rate'}</div></div></button>`; })() : ''}
     <div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
     ${prs.length ? `<div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : '<div class="empty">Personal records show up here.</div>'}
     <div class="section-head"><h3>${icon('award')} Achievements</h3><span class="muted sm">${Achievements.unlocked().size} of ${Achievements.LIST.length}</span></div>
@@ -261,6 +266,9 @@ const UI = {
     const vol = workoutVolume(a, true), done = a.exercises.reduce((s, e) => s + e.sets.filter(x => x.done).length, 0);
     return `
       <input class="title-input" data-f="wname" value="${esc(a.name)}" aria-label="Workout name">
+      ${Store.data.workouts.length < 3 && !Store.data.settings.hideLogTips ? `<div class="card tip-card sm"><b>${icon('info-circle')} How to log a workout</b>
+        <ol><li>The grey numbers are what you did last time. Type what you actually do in each box.</li><li>Tap ${icon('check')} when you finish a set. The rest timer starts by itself.</li><li>The blue coach box says what to aim for today. Tap <b>Apply</b> to fill it in.</li><li>Tap an exercise name for how to do it.</li><li>Tap <b>Finish</b> at the top when you're done.</li></ol>
+        <button class="link sm" data-a="hideLogTips">Got it, hide this</button></div>` : ''}
       <div class="row muted sm wstats"><span>${icon('weight')} ${fmtNum(vol)} ${U()}</span><span>${icon('check')} ${done} sets</span>${a.readiness != null ? `<span>${icon('heart-rate-monitor')} readiness ${a.readiness}</span>` : ''}${BLE.hrDevice ? `<span class="hr">${icon('heart')} <span class="hrLive">${BLE.hr || '–'}</span> bpm</span>` : ''}</div>
       ${a.exercises.map((e, i) => this.exCard(e, i, a)).join('')}
       <button class="btn wide primary-ghost" data-a="addExercise">${icon('plus')} Add exercise</button>
@@ -289,6 +297,8 @@ const UI = {
       <div class="row-between"><button class="ex-title" data-a="exDetail" data-id="${e.exId}">${esc(ex.name)}</button>
         <button class="icon-btn" data-a="exMenu" data-i="${i}" aria-label="Exercise options">${icon('dots-vertical')}</button></div>
       ${inSS ? `<div class="ss-tag sm">${icon('link')} Superset</div>` : ''}
+      <div class="ex-target sm"><span>${icon('target')} ${esc(targetText(ex, e.target || Coach.defaultTarget(ex)))}${ex.type !== 'dist' && +e.rest ? ` · rest ${fmtDur(e.rest)}` : ''}</span><button class="link sm" data-a="toggleHow" data-i="${i}" aria-expanded="${!!e.showHow}">${icon('info-circle')} ${e.showHow ? 'Hide' : 'How to'}</button></div>
+      ${e.showHow ? (() => { const h = howTo(ex); return `<div class="howto sm"><p>${esc(h.steps)}</p><p class="muted">${icon('bulb')} ${esc(h.tip)}</p><p class="muted">${esc(trackingText(ex))}</p></div>`; })() : ''}
       ${e.showNotes || e.notes ? `<textarea class="notes" data-f="enotes" data-i="${i}" placeholder="Notes: seat height, grip, cues">${esc(e.notes)}</textarea>` : ''}
       <div class="coach ${sug.kind}">
         <div class="coach-head">${icon('sparkles')}<b>${esc(sug.title)}</b>${sug.tag ? `<span class="tag">${esc(sug.tag)}</span>` : ''}${sug.rpeTarget ? `<span class="tag">RPE ${sug.rpeTarget}</span>` : ''}</div>
@@ -383,11 +393,13 @@ const UI = {
     const p = this.pick, q = p.q.toLowerCase().trim();
     const recent = new Set(Store.workoutsSorted().slice(0, 10).flatMap(w => w.exercises.map(e => e.exId)));
     let list = Store.allExercises().filter(e => (!p.gymOnly || Plan.available(e)) && (p.disc === 'all' || e.discipline === p.disc) && (p.muscle === 'all' || e.muscle === p.muscle || (e.secondary || []).includes(p.muscle)) && (!q || e.name.toLowerCase().includes(q) || (MUSCLES[e.muscle] || '').toLowerCase().includes(q)));
-    list.sort((a, b) => (recent.has(b.id) - recent.has(a.id)) || a.name.localeCompare(b.name));
-    return list.slice(0, 120).map(e => `<button class="li pick ${p.sel.includes(e.id) ? 'sel' : ''}" data-a="pickToggle" data-id="${e.id}">
+    const head = e => q ? '' : recent.has(e.id) ? 'Recent' : (DISCIPLINES[e.discipline] ? DISCIPLINES[e.discipline].name + ' · ' : '') + exGroup(e);
+    list.sort((a, b) => (recent.has(b.id) - recent.has(a.id)) || (q ? 0 : head(a).localeCompare(head(b))) || a.name.localeCompare(b.name));
+    let last = null;
+    return list.slice(0, 200).map(e => { const h = head(e), hd = h && h !== last ? `<div class="pick-head">${esc(h)}</div>` : ''; last = h; return `${hd}<button class="li pick ${p.sel.includes(e.id) ? 'sel' : ''}" data-a="pickToggle" data-id="${e.id}">
       <span class="ex-ic">${icon(DISCIPLINES[e.discipline] ? DISCIPLINES[e.discipline].icon : 'barbell')}</span>
-      <span><b>${esc(e.name)}</b><span class="sm muted">${MUSCLES[e.muscle] || ''} · ${e.equipment}${recent.has(e.id) ? ' · recent' : ''}</span></span>
-      ${p.sel.includes(e.id) ? icon('circle-check', 'acc') : icon('circle', 'muted')}</button>`).join('') || '<div class="empty">No matches. Create a custom exercise below.</div>';
+      <span><b>${esc(e.name)}</b><span class="sm muted">${MUSCLES[e.muscle] || ''}${e.equipment !== 'none' ? ' · ' + e.equipment : ''} · ${esc(trackingText(e).replace(/^Log /, '').replace(/\.$/, ''))}</span></span>
+      ${p.sel.includes(e.id) ? icon('circle-check', 'acc') : icon('circle', 'muted')}</button>`; }).join('') || '<div class="empty">No matches. Create a custom exercise below.</div>';
   },
 
   // ---------- Routine editor
@@ -399,7 +411,7 @@ const UI = {
       const folders = [...new Set(Store.data.routines.map(r => r.folder || r.program).filter(Boolean))];
       return `<input class="title-input" data-rf="name" value="${esc(d.name)}" aria-label="Routine name">
       <label class="field">Folder <span class="muted sm">(optional, groups routines on Home)</span><input data-rf="folder" list="folderList" value="${esc(d.folder || d.program || '')}" placeholder="e.g. Summer cut"><datalist id="folderList">${folders.map(f => `<option value="${esc(f)}">`).join('')}</datalist></label>
-      ${d.exercises.map((e, i) => { const ex = Store.ex(e.exId); const isT = ex.type === 'dur'; const none = ex.type === 'dist' || ex.type === 'climb'; return `
+      ${d.exercises.map((e, i) => { const ex = Store.ex(e.exId); const isT = ex.type === 'dur' || ex.type === 'wdur'; const none = ex.type === 'dist' || ex.type === 'climb'; return `
         <div class="card"><div class="row-between"><b>${esc(ex.name)}</b><span>
           <button class="icon-btn" data-a="rMove" data-i="${i}" data-v="-1" aria-label="Move up">${icon('arrow-up')}</button>
           <button class="icon-btn" data-a="rRemove" data-i="${i}" aria-label="Remove">${icon('x')}</button></span></div>
@@ -442,10 +454,12 @@ const UI = {
       else if (ds.f === 'enotes') a.exercises[i].notes = v;
       else if (ds.f === 'rest') a.exercises[i].rest = +v;
       else if (ds.f === 'sent') a.exercises[i].sets[j].sent = v;
-      else if (['w', 'r', 'rpe', 't', 'd', 'g', 'a'].includes(ds.f)) a.exercises[i].sets[j][ds.f] = ds.f === 'g' ? v : (ds.f === 't' && ds.fmt === 'mmss' ? (v.includes(':') ? parseDur(v) : v) : v);
+      else if (ds.f === 'st') { const st = a.exercises[i].sets[j]; st.st = v; st.sent = v !== ''; }
+      else if (['w', 'r', 'rpe', 't', 'd', 'g', 'a', 'ang'].includes(ds.f)) a.exercises[i].sets[j][ds.f] = ds.f === 'g' ? v : (ds.f === 't' && ds.fmt === 'mmss' ? (v.includes(':') ? parseDur(v) : v) : v);
       Store.save();
       if (isChange && ds.f === 'g') this.refreshSheet();
     }
+    if (ds.f === 'discq' && this.top()) { this.disc = { ...(this.disc || { grp: 'all' }), q: v }; const el = $('#discList'); if (el) el.innerHTML = this.discList(this.top().discKey); }
     if (ds.f === 'pickq') { this.pick.q = v; $('#pickList').innerHTML = this.pickList(); }
     if (ds.rf && this.draft) {
       const d = this.draft;
@@ -465,8 +479,8 @@ const UI = {
       if (['theme', 'textSize'].includes(ds.setting)) applyLook();
       if (isChange && ['unit', 'autoUpdate', 'autoSync'].includes(ds.setting)) this.refreshSheet();
     }
-    if (ds.ci) { this.ci[ds.ci] = +v; const out = $('#ci-' + ds.ci); if (out) out.textContent = v; const sc = $('#ciScore'); if (sc) sc.textContent = readinessScore(this.ci); }
-    if (ds.tc) { this.tconf[ds.tc] = ds.tc === 'name' ? v : num(v); const s = $('#tcSum'); if (s) s.textContent = timerSummary(this.tconf); }
+    if (ds.ci) { this._ciTouched = true; this.ci[ds.ci] = +v; const out = $('#ci-' + ds.ci); if (out) out.textContent = v; const sc = $('#ciScore'); if (sc) sc.textContent = readinessScore(this.ci); }
+    if (ds.tc) { this.tconf[ds.tc] = ds.tc === 'name' ? v : ds.tc === 'moves' ? v.split('\n').map(x => x.trim()).filter(Boolean) : num(v); const s = $('#tcSum'); if (s) s.textContent = timerSummary(this.tconf); }
     if (ds.tool) { this.toolState[ds.tool] = v; const r = $('#toolOut'); if (r) r.innerHTML = this.toolOut(); }
     if (ds.m) this.mdraft[ds.m] = v;
     if (ds.imp) this.impUnit = v;
@@ -497,15 +511,21 @@ function routineGroups(d) {
 }
 
 function setColumns(ex) {
-  return { wr: ['w', 'r', 'rpe'], wbw: ['w', 'r', 'rpe'], bw: ['r', 'rpe'], dur: ['t'], dist: ['d', 'tt'], climb: ['g', 'a', 'sent'] }[ex.type] || ['w', 'r'];
+  return { wr: ['w', 'r', 'rpe'], wbw: ['w', 'r', 'rpe'], bw: ['r', 'rpe'], dur: ['t'], wdur: ['w', 't'], dist: ['d', 'tt'], climb: ['g', 'a', 'st', 'ang'] }[ex.type] || ['w', 'r'];
 }
 function colLabel(c, ex) {
-  return { w: ex.type === 'wbw' ? '+' + U() : U(), r: 'Reps', rpe: 'RPE', t: 'Sec', d: 'km', tt: 'Time', g: 'Grade', a: 'Tries', sent: 'Sent' }[c];
+  const added = ex.type === 'wbw' || (ex.type === 'wdur' && !Climb.LIFT.includes(ex.id));
+  return { w: added ? '+' + U() : U(), r: 'Reps', rpe: 'RPE', t: 'Sec', d: 'km', tt: 'Time', g: 'Grade', a: 'Tries', sent: 'Sent', st: 'Result', ang: 'Wall' }[c];
 }
 function setInput(ex, c, s, i, j) {
   const p = s.p || {};
   if (c === 'sent') return `<label class="sent"><input type="checkbox" data-f="sent" data-i="${i}" data-j="${j}" ${s.sent ? 'checked' : ''} aria-label="Sent"></label>`;
-  if (c === 'g') { const scale = ex.id === 'bouldering' ? CLIMB_GRADES.boulder : CLIMB_GRADES.route; return `<select data-f="g" data-i="${i}" data-j="${j}" aria-label="Grade"><option value="">${esc(p.g || '–')}</option>${scale.map(g => `<option ${s.g === g ? 'selected' : ''}>${g}</option>`).join('')}</select>`; }
+  if (c === 'g') {
+    const scale = Climb.grades(Climb.cat(ex)), opts = s.g && !scale.includes(s.g) ? [s.g, ...scale] : scale;
+    return `<select data-f="g" data-i="${i}" data-j="${j}" aria-label="Grade"><option value="">${esc(p.g || '–')}</option>${opts.map(g => `<option ${s.g === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>`;
+  }
+  if (c === 'st') { const cur = s.st != null ? s.st : (s.sent ? 'sent' : ''); return `<select data-f="st" data-i="${i}" data-j="${j}" aria-label="Result">${CLIMB_RESULTS.filter(r => r[0] !== 'onsight' || Climb.cat(ex) === 'route').map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`; }
+  if (c === 'ang') return `<select data-f="ang" data-i="${i}" data-j="${j}" aria-label="Wall angle">${CLIMB_ANGLES.map(([v, l]) => `<option value="${v}" ${(s.ang || '') === v ? 'selected' : ''}>${v ? l : '–'}</option>`).join('')}</select>`;
   if (c === 'tt') return `<input inputmode="numeric" data-f="t" data-fmt="mmss" data-i="${i}" data-j="${j}" value="${s.t !== '' ? fmtDur(s.t) : ''}" placeholder="${p.t ? fmtDur(p.t) : 'mm:ss'}" aria-label="Time">`;
   const ph = c === 'w' ? fmtW(p.w) : (p[c] != null ? p[c] : '');
   const mode = c === 'r' || c === 't' || c === 'a' ? 'numeric' : 'decimal';
@@ -514,7 +534,8 @@ function setInput(ex, c, s, i, j) {
 function prevText(ex, s) {
   if (ex.type === 'dist') return `${s.d || 0}km ${fmtDur(s.t)}`;
   if (ex.type === 'dur') return `${s.t}s`;
-  if (ex.type === 'climb') return `${s.g || '?'}${s.sent ? ' ✓' : ''}`;
+  if (ex.type === 'climb') return `${s.g || '?'}${s.sent ? (s.st === 'flash' || s.st === 'onsight' ? ' ⚡' : ' ✓') : ''}`;
+  if (ex.type === 'wdur') return `${Climb.LIFT.includes(ex.id) ? fmtW(s.w) : (+s.w ? '+' + fmtW(s.w) : 'BW')} ${s.t || 0}s`;
   if (ex.type === 'bw') return `${s.r}`;
   return `${fmtW(s.w)}×${s.r}`;
 }
@@ -529,6 +550,8 @@ function readinessScore(c) {
   // Watch signals: resting HR well above your baseline, or HRV well below, both mean incomplete recovery
   if (c.rhrDelta != null) s -= c.rhrDelta >= 7 ? 12 : c.rhrDelta >= 4 ? 6 : c.rhrDelta <= -3 ? -3 : 0;
   if (c.hrvRatio != null) s -= c.hrvRatio < 0.8 ? 10 : c.hrvRatio < 0.9 ? 5 : c.hrvRatio > 1.1 ? -3 : 0;
+  // Several short nights in a row add up even if last night was fine
+  if (c.sleepAvg != null) s -= c.sleepAvg < 5.5 ? 6 : c.sleepAvg < 6.5 ? 3 : 0;
   return Math.max(0, Math.min(100, Math.round(s)));
 }
 function readinessLabel(s) { return s >= 85 ? 'Primed. A good day to push for PRs.' : s >= 65 ? 'Good to train as planned.' : s >= 45 ? 'A bit flat. Stick to the plan, no heroics.' : 'Low. The coach will lighten today\'s targets.'; }
@@ -560,6 +583,13 @@ function findPRs(w) {
       if (mw > b.w) out.push({ ex: ex.name, what: 'Heaviest weight', val: fmtW(mw) + ' ' + U() });
       if (me1 > b.e1 + 0.01) out.push({ ex: ex.name, what: 'Best est. 1RM', val: Math.round(me1) + ' ' + U() });
     } else if (ex.type === 'bw' && mr > b.r) out.push({ ex: ex.name, what: 'Most reps', val: mr });
+    else if (ex.type === 'wdur') { if (mw > b.w && sets.some(s => (+s.w || 0) === mw && (+s.t || 0) >= 5)) out.push({ ex: ex.name, what: 'Heaviest hold', val: fmtW(mw) + ' ' + U() }); }
+    else if (ex.type === 'climb') {
+      const cat = Climb.cat(ex), val = s => (s.sent ? Climb.value(s.g, cat) : null);
+      const before = Math.max(-9, ...Store.sessions(e.exId, 200).filter(h => h.workoutId !== w.id).flatMap(h => h.sets.map(val)).filter(v => v != null));
+      const now = Math.max(-9, ...sets.map(val).filter(v => v != null));
+      if (now > before && before > -9) out.push({ ex: ex.name, what: 'Hardest send', val: Climb.label(now, cat) });
+    }
     else if (ex.type === 'dur') { const mt = Math.max(0, ...sets.map(s => +s.t || 0)); if (mt > b.t) out.push({ ex: ex.name, what: 'Longest', val: fmtDur(mt) }); }
     else if (ex.type === 'dist') { const s = sets[0]; if (s && +s.d > b.d) out.push({ ex: ex.name, what: 'Longest distance', val: s.d + ' km' }); if (s && +s.d >= 1 && s.t / s.d < b.pace) out.push({ ex: ex.name, what: 'Best pace', val: fmtPace(s.t / s.d) }); }
   }
@@ -627,11 +657,23 @@ function summaryBody(w, prs) {
 }
 
 const TIMER_PRESETS = {
-  hiit: { name: 'HIIT', icon: 'flame', work: 40, rest: 20, rounds: 10 },
-  tabata: { name: 'Tabata', icon: 'bolt', work: 20, rest: 10, rounds: 8 },
-  emom: { name: 'EMOM', icon: 'repeat', work: 60, rest: 0, rounds: 12 },
-  amrap: { name: 'AMRAP', icon: 'infinity', work: 900, rest: 0, rounds: 1 },
-  boxing: { name: 'Boxing', icon: 'karate', work: 180, rest: 60, rounds: 6 },
-  bjj: { name: 'BJJ rolls', icon: 'users', work: 300, rest: 60, rounds: 5 }
+  hiit: { name: 'HIIT', icon: 'flame', work: 40, rest: 20, rounds: 10, about: 'High-intensity intervals. Work hard for the work time, recover during the rest, repeat.',
+    how: ['Pick 4–5 moves below (or keep the suggestions).', 'Each work interval, do the move shown on screen at a hard but steady pace.', 'Rest when the screen turns to Rest. The next move is shown so you can get ready.', 'The list repeats until all rounds are done.'],
+    moves: ['Burpees', 'Mountain climbers', 'Squat jumps', 'Push-ups', 'High knees'] },
+  tabata: { name: 'Tabata', icon: 'bolt', work: 20, rest: 10, rounds: 8, about: '4 minutes: 20 seconds all-out, 10 seconds rest, 8 times. Short and very hard.',
+    how: ['Choose one or two moves you can do fast and safely.', 'Go flat out for every 20 seconds.', 'Count your reps each round; try to keep the count the same in the last round.'],
+    moves: ['Squat jumps', 'Push-ups'] },
+  emom: { name: 'EMOM', icon: 'repeat', work: 60, rest: 0, rounds: 12, about: 'Every minute on the minute. At the start of each minute, do the set reps. Whatever is left of the minute is your rest.',
+    how: ['Write each minute\'s task below with its reps, e.g. "10 kettlebell swings".', 'When the minute starts, do the reps shown.', 'Rest until the next minute beeps.', 'If you can\'t finish the reps with at least 10 seconds to spare, lower them.'],
+    moves: ['10 Kettlebell swings', '8 Push-ups', '12 Air squats'] },
+  amrap: { name: 'AMRAP', icon: 'infinity', work: 900, rest: 0, rounds: 1, about: 'As many rounds as possible within the time cap.',
+    how: ['Set up a circuit below, e.g. 5 pull-ups, 10 push-ups, 15 squats.', 'Go through the circuit in order, again and again, at a pace you can keep.', 'Tap Round done each time you finish the circuit.', 'Your score is the number of rounds. Beat it next time.'],
+    moves: ['5 Pull-ups', '10 Push-ups', '15 Air squats'] },
+  boxing: { name: 'Boxing', icon: 'karate', work: 180, rest: 60, rounds: 6, about: 'Boxing rounds: 3 minutes on, 1 minute off. For bag work, shadow boxing or pads.',
+    how: ['Wrap your hands and warm up.', 'Each round has a focus shown on screen. Keep your guard up and keep moving.', 'Use the minute off to breathe and shake out your arms.'],
+    moves: ['Jab and cross', 'Hooks and uppercuts', 'Body shots', 'Defence and footwork', 'Free combinations', 'All-out last round'] },
+  bjj: { name: 'BJJ rolls', icon: 'users', work: 300, rest: 60, rounds: 5, about: 'Timed sparring rounds for grappling. Switch partners each round.',
+    how: ['Agree on intensity with your partner.', 'Roll for the round time. Tap early, tap often.', 'Rest and switch partners during the break.'],
+    moves: [] }
 };
 function timerSummary(c) { const total = c.rounds * c.work + Math.max(0, c.rounds - 1) * c.rest + (c.prep || 0); return `${c.rounds} × ${fmtDur(c.work)} work${c.rest ? ' / ' + fmtDur(c.rest) + ' rest' : ''} · total ${fmtDur(total)}`; }

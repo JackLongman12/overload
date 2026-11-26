@@ -44,6 +44,79 @@ const HC = {
     return r;
   },
   disconnect() { Store.data.settings.healthConnect = false; Store.save(true); },
+  openSettings() { try { return this.api.openHealthConnectSettings(); } catch (e) { } },
+
+  // Apps that write sleep to Health Connect. When several track the same night,
+  // a dedicated sleep app wins over a watch app, unless you pick a source.
+  SLEEP_APPS: { 'com.urbandroid.sleep': 'Sleep as Android', 'com.sec.android.app.shealth': 'Samsung Health', 'com.fitbit.FitbitMobile': 'Fitbit',
+    'com.google.android.apps.fitness': 'Google Fit', 'com.ouraring.oura': 'Oura', 'com.garmin.android.apps.connectmobile': 'Garmin Connect', 'com.mi.health': 'Mi Fitness',
+    'com.xiaomi.wearable': 'Mi Fitness', 'com.huami.watch.hmwatchmanager': 'Zepp', 'com.huawei.health': 'Huawei Health', 'com.hihonor.health': 'Honor Health', 'com.withings.wiscale2': 'Withings', 'com.whoop.android': 'WHOOP' },
+  SLEEP_PRIORITY: ['com.urbandroid.sleep', 'com.ouraring.oura', 'com.whoop.android', 'com.sec.android.app.shealth', 'com.fitbit.FitbitMobile', 'com.garmin.android.apps.connectmobile'],
+  appName(id, name) { return this.SLEEP_APPS[id] || (name && name !== id ? name : (id || 'Unknown app')); },
+
+  // Last night from raw sleep sessions: one source, the main sleep plus pieces close to it,
+  // time asleep, stage minutes, efficiency and an estimated quality (1 to 5).
+  summarizeSleep(samples, now = Date.now(), pref = 'auto') {
+    const recent = (samples || []).filter(s => { const e = Date.parse(s.endDate); return e > now - 30 * 3600e3 && e <= now + 600e3; });
+    if (!recent.length) return null;
+    const groups = {};
+    recent.forEach(s => { const k = s.sourceId || s.sourceName || 'unknown'; (groups[k] = groups[k] || []).push(s); });
+    const dur = s => (Date.parse(s.endDate) - Date.parse(s.startDate)) / 60000;
+    const ids = Object.keys(groups), total = k => groups[k].reduce((a, s) => a + dur(s), 0);
+    let src = pref && pref !== 'auto' && groups[pref] ? pref : this.SLEEP_PRIORITY.find(k => groups[k]);
+    if (!src) src = ids.sort((a, b) => total(b) - total(a))[0];
+    // Main sleep = longest session; pieces within 3 hours of it belong to the same night (not naps)
+    const list = groups[src].slice().sort((a, b) => dur(b) - dur(a)), main = list[0];
+    let start = Date.parse(main.startDate), end = Date.parse(main.endDate);
+    const night = list.filter(s => Date.parse(s.startDate) < end + 3 * 3600e3 && Date.parse(s.endDate) > start - 3 * 3600e3);
+    night.forEach(s => { start = Math.min(start, Date.parse(s.startDate)); end = Math.max(end, Date.parse(s.endDate)); });
+    const m = { asleep: 0, deep: 0, rem: 0, light: 0, awake: 0 };
+    let staged = false;
+    night.forEach(s => {
+      if (s.stages && s.stages.length) {
+        staged = true;
+        s.stages.forEach(st => { const k = st.stage, mins = +st.durationMinutes || 0; if (k === 'awake' || k === 'inBed') m.awake += mins; else { m.asleep += mins; if (m[k] != null) m[k] += mins; } });
+      } else if (s.sleepState === 'awake' || s.sleepState === 'inBed') m.awake += dur(s);
+      else m.asleep += dur(s);
+    });
+    if (m.asleep <= 0) return null;
+    const out = { sleepH: Math.round(m.asleep / 6) / 10, start, end, source: this.appName(src, groups[src][0].sourceName), sourceId: src,
+      sources: ids.map(k => ({ id: k, name: this.appName(k, groups[k][0].sourceName) })) };
+    if (staged) {
+      const inBed = m.asleep + m.awake, detail = m.deep + m.rem > 0;
+      out.deepMin = Math.round(m.deep); out.remMin = Math.round(m.rem); out.awakeMin = Math.round(m.awake);
+      out.eff = inBed ? Math.round(m.asleep / inBed * 100) / 100 : null;
+      let q = 3;
+      if (detail) { const share = (m.deep + m.rem) / m.asleep; q += share >= 0.45 ? 1 : share < 0.3 ? -1 : 0; out.restorative = Math.round(share * 100); }
+      if (out.eff != null) q += out.eff >= 0.9 ? 1 : out.eff < 0.8 ? -1 : 0;
+      if (m.awake >= 60) q -= 1;
+      if (m.asleep < 300) q -= 1;
+      out.quality = Math.max(1, Math.min(5, q));
+    }
+    return out;
+  },
+
+  // Lowest heart rate while asleep (average of the 3 lowest readings). Used when the
+  // watch app (Samsung Health, for example) doesn't write resting heart rate.
+  sleepingHR(samples) {
+    const v = (samples || []).map(s => +s.value).filter(x => x > 25 && x < 200).sort((a, b) => a - b);
+    if (v.length < 5) return null;
+    const low = v.slice(0, 3);
+    return Math.round(low.reduce((a, b) => a + b, 0) / low.length);
+  },
+
+  // One line per day so baselines and sleep averages work for any app
+  logDay(h) {
+    const d = Store.data, day = new Date(h.at).toISOString().slice(0, 10);
+    d.healthLog = (d.healthLog || []).filter(x => x.day !== day);
+    d.healthLog.push({ day, sleepH: h.sleepH || null, quality: h.sleepQ || null, rhr: h.rhr ? h.rhr.latest : null, hrv: h.hrv ? h.hrv.latest : null });
+    d.healthLog = d.healthLog.sort((a, b) => a.day < b.day ? -1 : 1).slice(-45);
+  },
+  // Average over the previous days (not today)
+  logAvg(key, days, today = new Date().toISOString().slice(0, 10)) {
+    const v = (Store.data.healthLog || []).filter(x => x.day < today && x[key] != null).slice(-days).map(x => x[key]);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  },
   async read(dataType, fromMs, limit = 200) {
     try { const r = await this.api.readSamples({ dataType, startDate: this.iso(fromMs), endDate: this.iso(Date.now()), limit }); return r.samples || []; }
     catch (e) { return []; }
@@ -53,14 +126,12 @@ const HC = {
   async pull() {
     if (!this.on) return null;
     const now = Date.now(), d = Store.data, h = {};
-    // Last night's sleep: asleep, light, deep and REM time in the last 30 hours
-    const sleep = await this.read('sleep', now - 30 * 3600e3, 300);
-    let mins = 0;
-    sleep.forEach(s => {
-      if (s.stages && s.stages.length) s.stages.forEach(st => { if (st.stage !== 'awake' && st.stage !== 'inBed') mins += st.durationMinutes; });
-      else if (!s.sleepState || !['awake', 'inBed'].includes(s.sleepState)) mins += (Date.parse(s.endDate) - Date.parse(s.startDate)) / 60000;
-    });
-    if (mins > 0) h.sleepH = Math.round(mins / 6) / 10;
+    // Last night's sleep from one app (Sleep as Android, Samsung Health, a watch app...)
+    const night = this.summarizeSleep(await this.read('sleep', now - 42 * 3600e3, 300), now, d.settings.sleepSource || 'auto');
+    if (night) {
+      h.sleepH = night.sleepH; h.sleepQ = night.quality || null; h.sleep = night;
+      d.settings.sleepSources = night.sources; // remembered for the source picker
+    }
     // Resting heart rate and HRV vs your 2-week baseline
     const base = async type => {
       const s = (await this.read(type, now - 15 * 864e5, 200)).sort((a, b) => Date.parse(b.startDate) - Date.parse(a.startDate));
@@ -70,6 +141,13 @@ const HC = {
     };
     h.rhr = await base('restingHeartRate');
     h.hrv = await base('heartRateVariability');
+    // No resting HR from the watch app: use the lowest heart rate during last night's sleep
+    if ((!h.rhr || !h.rhr.fresh) && night) {
+      const shr = this.sleepingHR(await this.read('heartRate', night.start, 3000).then(x => x.filter(s => Date.parse(s.startDate) <= night.end)));
+      if (shr) { const b = this.logAvg('rhr', 14); h.rhr = { latest: shr, base: b ? Math.round(b) : null, fresh: true, sleeping: true }; }
+    }
+    if (h.hrv && !h.hrv.base) { const b = this.logAvg('hrv', 14); if (b) h.hrv.base = Math.round(b); }
+    if (h.rhr && !h.rhr.base) { const b = this.logAvg('rhr', 14); if (b) h.rhr.base = Math.round(b); }
     const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
     h.steps = Math.round((await this.read('steps', midnight.getTime(), 1000)).reduce((a, s) => a + (s.value || 0), 0));
     // Weight and body fat from other apps and scales
@@ -88,6 +166,8 @@ const HC = {
     h.imported = await this.importWorkouts(now - 30 * 864e5);
     h.at = now;
     d.health = h;
+    this.logDay(h);
+    h.sleepAvg3 = this.logAvg('sleepH', 3);
     Store.save(true);
     return h;
   },
@@ -215,7 +295,7 @@ const Companion = {
       if (i < 0) continue;
       const s = e.sets[i], p = s.p || {}, n = s.type === 'W' ? 'Warm-up' : `Set ${work.indexOf(s) + 1} of ${work.length}`;
       const val = k => (s[k] !== '' && s[k] != null ? s[k] : p[k]);
-      const target = ex.type === 'dist' ? `${val('d') || '?'} km` : ex.type === 'dur' ? `${val('t') || '?'} s` : ex.type === 'bw' ? `${val('r') || '?'} reps` : `${fmtW(val('w')) || '?'} ${U()} × ${val('r') || '?'}`;
+      const target = ex.type === 'dist' ? `${val('d') || '?'} km` : ex.type === 'dur' ? `${val('t') || '?'} s` : ex.type === 'climb' ? `${val('g') || 'Any grade'}` : ex.type === 'wdur' ? `${fmtW(val('w')) || 0} ${U()} · ${val('t') || '?'} s` : ex.type === 'bw' ? `${val('r') || '?'} reps` : `${fmtW(val('w')) || '?'} ${U()} × ${val('r') || '?'}`;
       return { ei: a.exercises.indexOf(e), si: i, name: ex.name, set: n, target };
     }
     return null;

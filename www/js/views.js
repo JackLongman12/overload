@@ -13,7 +13,8 @@ const Timer = {
     const ph = [];
     if (c.prep) ph.push({ label: 'Get ready', secs: c.prep, kind: 'prep' });
     for (let r = 1; r <= c.rounds; r++) {
-      ph.push({ label: c.type === 'emom' ? `Minute ${r}` : c.type === 'amrap' ? 'AMRAP' : `Round ${r} of ${c.rounds}`, secs: c.work, kind: 'work', r });
+      const mv = c.moves && c.moves.length && c.type !== 'amrap' ? c.moves[(r - 1) % c.moves.length] : '';
+      ph.push({ label: c.type === 'emom' ? `Minute ${r}` : c.type === 'amrap' ? 'AMRAP' : `Round ${r} of ${c.rounds}`, secs: c.work, kind: 'work', r, move: mv });
       if (c.rest && r < c.rounds) ph.push({ label: 'Rest', secs: c.rest, kind: 'rest' });
     }
     return ph;
@@ -25,7 +26,7 @@ const Timer = {
     beep(880, 200);
   },
   scheduleNotifs() {
-    Notify.ensure().then(ok => { if (!ok) return; let t = this.end; for (let k = this.i + 1; k < Math.min(this.phases.length, this.i + 40); k++) { Notify.at(100 + k, t, this.phases[k].label, this.phases[k].kind === 'rest' ? 'Rest' : 'Go'); t += this.phases[k].secs * 1000; } Notify.at(99, t, 'Timer finished', 'Great work'); });
+    Notify.ensure().then(ok => { if (!ok) return; let t = this.end; for (let k = this.i + 1; k < Math.min(this.phases.length, this.i + 40); k++) { Notify.at(100 + k, t, this.phases[k].label, this.phases[k].kind === 'rest' ? 'Rest' + (this.phases[k + 1] && this.phases[k + 1].move ? '. Next: ' + this.phases[k + 1].move : '') : (this.phases[k].move || 'Go')); t += this.phases[k].secs * 1000; } Notify.at(99, t, 'Timer finished', 'Great work'); });
   },
   cancelNotifs() { for (let k = 0; k < Math.min(this.phases.length, 200); k++) Notify.cancel(100 + k); Notify.cancel(99); },
   tick() {
@@ -68,19 +69,30 @@ Object.assign(UI, {
 
   openCheckin(beforeWorkout) {
     this.ci = { sleep: 7, quality: 3, soreness: 2, energy: 3, stress: 2 };
+    this._ciTouched = false; this._ciBefore = beforeWorkout;
     const h = Store.data.health && Date.now() - Store.data.health.at < 6 * 3600e3 ? Store.data.health : null;
-    let watchNote = '';
+    let watchNote = '', filled = [];
     if (h) {
-      if (h.sleepH) this.ci.sleep = Math.min(10, Math.max(3, Math.round(h.sleepH * 2) / 2));
+      if (h.sleepH) { this.ci.sleep = Math.min(10, Math.max(3, Math.round(h.sleepH * 2) / 2)); filled.push('sleep'); }
+      if (h.sleepQ) { this.ci.quality = h.sleepQ; filled.push('quality'); }
       if (h.rhr && h.rhr.base && h.rhr.fresh) this.ci.rhrDelta = h.rhr.latest - h.rhr.base;
       if (h.hrv && h.hrv.base && h.hrv.fresh) this.ci.hrvRatio = h.hrv.latest / h.hrv.base;
-      watchNote = [h.sleepH ? `${h.sleepH} h sleep` : '', h.rhr ? `resting HR ${h.rhr.latest}${h.rhr.base ? ' (usual ' + h.rhr.base + ')' : ''}` : '', h.hrv ? `HRV ${h.hrv.latest} ms${h.hrv.base ? ' (usual ' + h.hrv.base + ')' : ''}` : ''].filter(Boolean).join(' · ');
-    } else if (HC.on) HC.pull().then(x => { if (x && this.top() && this.top().key === 'checkin') this.openCheckin(beforeWorkout); });
+      if (h.sleepAvg3 != null) this.ci.sleepAvg = Math.round(h.sleepAvg3 * 10) / 10;
+      const sl = h.sleep;
+      watchNote = [h.sleepH ? `${h.sleepH} h sleep${sl ? ' from ' + sl.source : ''}` : '',
+        sl && sl.restorative != null ? `${sl.restorative}% deep and REM` : '', sl && sl.eff != null ? `${Math.round(sl.eff * 100)}% efficiency` : '',
+        h.rhr ? `${h.rhr.sleeping ? 'sleeping HR' : 'resting HR'} ${h.rhr.latest}${h.rhr.base ? ' (usual ' + h.rhr.base + ')' : ''}` : '',
+        h.hrv ? `HRV ${h.hrv.latest} ms${h.hrv.base ? ' (usual ' + h.hrv.base + ')' : ''}` : '',
+        h.sleepAvg3 != null ? `3-night average ${h.sleepAvg3.toFixed(1)} h` : ''].filter(Boolean).join(' · ');
+      if (HC.on && Date.now() - h.at > 3600e3) HC.pull().then(x => { if (x && this.top() && this.top().key === 'checkin' && !this._ciTouched) this.openCheckin(beforeWorkout); });
+    } else if (HC.on) HC.pull().then(x => { if (x && this.top() && this.top().key === 'checkin' && !this._ciTouched) this.openCheckin(beforeWorkout); });
+    this._ciFilled = filled;
     const slider = (k, label, min, max, lo, hi, step = 1) => `<div class="ci"><div class="row-between"><span>${label}</span><b id="ci-${k}">${this.ci[k]}</b></div>
       <input type="range" min="${min}" max="${max}" step="${step}" value="${this.ci[k]}" data-ci="${k}" aria-label="${label}"><div class="row-between sm muted"><span>${lo}</span><span>${hi}</span></div></div>`;
     this.openSheet('checkin', 'Readiness check-in', () => `
       <p class="sm muted">30 seconds. The coach uses this to scale today's sets and weights.</p>
-      ${watchNote ? `<div class="card sm">${icon('device-watch')} From your watch: ${esc(watchNote)}. These are already included in the score.</div>` : ''}
+      ${watchNote ? `<div class="card sm">${icon('device-watch')} Synced: ${esc(watchNote)}. ${filled.length ? `Sleep ${filled.includes('quality') ? 'hours and quality are' : 'hours are'} filled in for you (quality is estimated from your sleep stages). Adjust them if they feel wrong.` : ''} Heart data is already in the score.</div>`
+        : HC.on ? '' : `<div class="sm muted">${icon('moon')} Use Samsung Health, Sleep as Android or a watch? <button class="link sm" data-a="devices">Link Health Connect</button> and sleep fills in by itself.</div>`}
       ${slider('sleep', 'Sleep (hours)', 3, 10, '3h', '10h', 0.5)}${slider('quality', 'Sleep quality', 1, 5, 'Poor', 'Great')}
       ${slider('soreness', 'Muscle soreness', 1, 5, 'None', 'Very sore')}${slider('energy', 'Energy', 1, 5, 'Drained', 'Wired')}
       ${slider('stress', 'Stress', 1, 5, 'Calm', 'High')}
@@ -139,10 +151,17 @@ Object.assign(UI, {
       <div class="card">
         ${HC.on ? `<div class="li static"><span>Status</span><span class="sm acc">${icon('check')} Linked</span></div>
           ${h ? `<div class="li static"><span>Last read</span><span class="sm muted">${fmtTime(h.at)}${h.steps ? ' · ' + fmtNum(h.steps) + ' steps' : ''}${h.sleepH ? ' · ' + h.sleepH + ' h sleep' : ''}${h.rhr ? ' · RHR ' + h.rhr.latest : ''}</span></div>` : ''}
+          ${h && h.sleep ? `<div class="li static"><span>Last night</span><span class="sm muted">${h.sleepH} h from ${esc(h.sleep.source)}${h.sleepQ ? ' · quality ' + h.sleepQ + '/5' : ''}</span></div>` : ''}
+          <label class="field">Sleep source<select data-setting="sleepSource"><option value="auto">Automatic (prefers Sleep as Android)</option>${(s.sleepSources || []).map(x => `<option value="${esc(x.id)}" ${s.sleepSource === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
           <div class="grid2" style="margin-top:8px"><button class="btn sm" data-a="hcPull">${icon('refresh')} Read now</button><button class="btn sm" data-a="hcSettings">${icon('settings')} Permissions</button></div>
           <button class="btn sm ghost wide" data-a="hcDisconnect">Unlink</button>`
         : `<p class="sm">Link Health Connect to use your watch's data. Sleep, resting heart rate and HRV feed the readiness score. Weight and body fat appear in measurements. Runs, rides and swims recorded on the watch show up in your history, and heart rate is added to your workouts.</p>
           <button class="btn primary wide" data-a="hcConnect">${icon('link')} Link Health Connect</button>`}
+        <details class="sm muted"><summary>Samsung Health and Sleep as Android setup</summary>
+          <p><b>Samsung Health:</b> open Samsung Health, tap the menu, Settings, Health Connect, and allow it to write Sleep, Heart rate, Steps, Weight and Exercise. Samsung writes sleep stages, so quality is estimated for you. If it doesn't write resting heart rate, Gym App uses your lowest heart rate during sleep instead.</p>
+          <p><b>Sleep as Android:</b> open Settings, Services, Health Connect, and turn it on (allow Sleep and Heart rate). Each tracked night is written when you stop tracking, so your morning check-in is filled in when you open Gym App.</p>
+          <p>If both apps track the same night, Gym App uses one of them (Sleep as Android first) so hours aren't counted twice. Change it with Sleep source above.</p>
+          <button class="btn sm" data-a="hcSettings">${icon('settings')} Open Health Connect</button></details>
         <details class="sm muted"><summary>Which watches work?</summary>
           <p><b>Samsung Galaxy Watch:</b> Samsung Health, Settings, Health Connect, then allow sharing.<br><b>Pixel Watch and Fitbit:</b> the Fitbit app syncs to Health Connect.<br><b>Xiaomi and Redmi:</b> Mi Fitness, Profile, Health Connect.<br><b>Amazfit:</b> Zepp app, Profile, Add accounts, Health Connect.<br><b>Garmin:</b> Garmin Connect, Settings, Health Connect.<br><b>Honor and Huawei:</b> depends on model and region. If your watch can broadcast heart rate, use the heart-rate section below.<br><b>Apple Watch:</b> not possible. It only pairs with iPhone.</p></details>
       </div>
@@ -231,8 +250,49 @@ Object.assign(UI, {
         <div class="chips" style="margin:6px 0 4px"><span class="chip ghost">${p.days} day${p.days > 1 ? 's' : ''}/week</span><span class="chip ghost">${esc(p.level)}</span><span class="chip ghost">${esc(p.equip)}</span></div>
         <div class="sm muted">${esc(p.desc)}</div></div>
         ${added.has(p.name) ? `<span class="sm acc">${icon('check')} Added</span>` : `<button class="btn sm primary" data-a="addProgram" data-id="${p.id}">Add</button>`}</div>
-        <details class="sm muted" style="margin-top:8px"><summary>${p.routines.length} workouts</summary>${p.routines.map(r => `<div style="margin-top:4px"><b>${esc(r[0])}</b>: ${r[1].map(e => esc(Store.ex(e[0]).name)).join(', ')}</div>`).join('')}</details></div>`).join('')}`;
+        <button class="btn sm wide" style="margin-top:10px" data-a="programDetail" data-id="${p.id}">${icon('list-details')} See the plan and how it works</button></div>`).join('')}`;
     });
+  },
+
+  // A program explained: who it's for, the weekly schedule, each workout with clear targets
+  openProgramDetail(id) {
+    const p = PROGRAMS.find(x => x.id === id); if (!p) return;
+    const added = Store.data.routines.some(r => r.program === p.name);
+    const days = { 1: ['Any day'], 2: ['Mon', 'Thu'], 3: ['Mon', 'Wed', 'Fri'], 4: ['Mon', 'Tue', 'Thu', 'Fri'], 5: ['Mon', 'Tue', 'Wed', 'Fri', 'Sat'], 6: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], 7: ['Every day'] }[p.days] || [];
+    const goalTip = { strength: 'Rest 2–3 minutes between heavy sets. Stop each set with 1–2 good reps left.', muscle: 'Rest 1–2 minutes. Take most sets close to failure (1–3 reps left).',
+      sport: 'Do these alongside your sport, not right before it. Skip the session if your fingers or joints hurt.', mobility: 'Breathe slowly and ease into each hold. Never force a stretch into pain.',
+      fat_loss: 'Keep rests short and the pace up. Pair it with walking and a small calorie deficit.', general: 'Start lighter than you think. Consistency beats intensity.',
+      home: 'Clear some floor space. Use a backpack with books if you need more load.', endurance: 'Most of the work should feel easy. Only the hard sessions should be hard.' }[p.goal] || 'Warm up for 5–10 minutes first.';
+    this.openSheet('progdetail', esc(p.name), () => `
+      <div class="chips"><span class="chip">${p.days} day${p.days > 1 ? 's' : ''} a week</span><span class="chip ghost">${esc(p.level)}</span><span class="chip ghost">${esc(p.equip)}</span><span class="chip ghost">${esc(PROGRAM_GOALS[p.goal] || p.goal)}</span></div>
+      <p>${esc(p.desc)}</p>
+      <div class="card tip-card sm"><b>${icon('info-circle')} How it works</b><ol>
+        <li>Tap <b>Add program</b>. It creates ${p.routines.length} routine${p.routines.length > 1 ? 's' : ''} on your Home tab, in a folder called "${esc(p.name)}".</li>
+        <li>Train ${p.days} day${p.days > 1 ? 's' : ''} a week${days.length > 1 ? `, for example ${days.join(', ')}` : ''}. Home always shows which workout is next. Do them in order and repeat.</li>
+        <li>"3 sets × 8–12 reps" means: pick a weight you can lift at least 8 times, do 3 sets, and rest in between. When you hit 12 reps on every set, the coach raises the weight.</li>
+        <li>Times like "3 × 30–60 s" are holds or rounds in seconds. Climbs are logged one by one with their grade.</li>
+        <li>${esc(goalTip)}</li></ol></div>
+      ${p.routines.map(([name, list], k) => `<div class="section-head"><h3>Workout ${k + 1}: ${esc(name)}</h3><span class="muted sm">${days[k % Math.max(1, days.length)] || ''}</span></div>
+        <div class="card list">${list.map(([exId, sets, a, b]) => { const ex = Store.ex(exId); return `<button class="li" data-a="exDetail" data-id="${exId}"><span class="grow left"><b>${esc(ex.name)}</b><span class="sm muted">${esc(howTo(ex).steps.split('. ')[0])}.</span></span><span class="tag-next nowrap">${esc(targetText(ex, { sets, repMin: a, repMax: b }))}</span></button>`; }).join('')}</div>`).join('')}
+      <div style="height:70px"></div>`,
+      { footer: () => `<div class="sheet-foot">${added ? `<div class="center sm acc">${icon('check')} Added. Find it on Home.</div>` : `<button class="btn primary wide" data-a="addProgram" data-id="${p.id}">${icon('plus')} Add program</button>`}</div>` });
+  },
+
+  // Library list for one discipline: search, category chips, grouped cards with what each one is
+  discList(key) {
+    const st = this.disc || { q: '', grp: 'all' };
+    const q = st.q.toLowerCase().trim();
+    const all = Store.allExercises().filter(e => e.discipline === key);
+    let list = all.filter(e => (st.grp === 'all' || exGroup(e) === st.grp) && (!q || e.name.toLowerCase().includes(q) || exGroup(e).toLowerCase().includes(q) || (MUSCLES[e.muscle] || '').toLowerCase().includes(q)));
+    const groups = {};
+    list.forEach(e => (groups[exGroup(e)] = groups[exGroup(e)] || []).push(e));
+    const kind = { wr: 'Weight × reps', wbw: 'Added weight × reps', bw: 'Reps', dur: 'Timed', wdur: 'Weight × time', dist: 'Distance', climb: 'Grade' };
+    if (!list.length) return '<div class="empty">No matches. Try another word or category.</div>';
+    return Object.entries(groups).map(([g, items]) => `<div class="section-head"><h3>${esc(g)}</h3><span class="muted sm">${items.length}</span></div>
+      <div class="ex-cards">${items.map(e => `<div class="card ex-card">
+        <button class="ex-card-main" data-a="exDetail" data-id="${e.id}"><b>${esc(e.name)}</b><span class="sm muted clamp">${esc(howTo(e).steps)}</span>
+          <span class="chips"><span class="chip ghost">${esc(kind[e.type] || '')}</span>${e.muscle !== 'mobility' && e.muscle !== 'cardio' ? `<span class="chip ghost">${esc(MUSCLES[e.muscle] || e.muscle)}</span>` : ''}${e.equipment !== 'none' ? `<span class="chip ghost">${esc(e.equipment)}</span>` : ''}</span></button>
+        <div class="ex-card-btns"><button class="btn sm" data-a="exDetail" data-id="${e.id}">${icon('info-circle')} How to</button><button class="btn sm primary" data-a="quickStart" data-id="${e.id}">${icon('player-play')} Start</button></div></div>`).join('')}</div>`).join('');
   },
 
   openCustomEx() {
@@ -240,7 +300,7 @@ Object.assign(UI, {
     const sel = (k, opts) => `<select data-cx="${k}">${opts.map(([v, l]) => `<option value="${v}" ${this.cx[k] === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
     this.openSheet('customex', 'Custom exercise', () => `
       <label class="field">Name<input data-cx="name" placeholder="Landmine press"></label>
-      <label class="field">Tracking ${sel('type', [['wr', 'Weight and reps'], ['bw', 'Bodyweight reps'], ['wbw', 'Weighted bodyweight'], ['dur', 'Time (holds, rounds)'], ['dist', 'Distance and time'], ['climb', 'Climbing grade']])}</label>
+      <label class="field">Tracking ${sel('type', [['wr', 'Weight and reps'], ['bw', 'Bodyweight reps'], ['wbw', 'Weighted bodyweight'], ['dur', 'Time (holds, rounds)'], ['wdur', 'Weight and hold time'], ['dist', 'Distance and time'], ['climb', 'Climbing grade']])}</label>
       <label class="field">Main muscle ${sel('muscle', Object.entries(MUSCLES))}</label>
       <label class="field">Discipline ${sel('discipline', Object.entries(DISCIPLINES).map(([k, v]) => [k, v.name]))}</label>
       <label class="field">Equipment ${sel('equipment', ['barbell', 'dumbbell', 'machine', 'cable', 'kettlebell', 'bodyweight', 'band', 'other', 'none'].map(x => [x, x]))}</label>
@@ -255,6 +315,34 @@ Object.assign(UI, {
     this.top().title = 'Exercise library'; this.top().footer = null; this.refreshSheet();
   },
 
+  // Climbing dashboard: hardest send, flash grade, top-5 average, pyramid, wall angles, finger strength
+  openClimbing() {
+    const days = this._climbDays || 90;
+    const pct = v => Math.round(v * 100) + '%';
+    const block = cat => {
+      const st = Climb.stats(cat, days); if (!st) return '';
+      const L = v => Climb.label(v, cat), maxN = Math.max(1, ...st.pyramid.map(p => p.tried));
+      const angles = CLIMB_ANGLES.filter(([k]) => k && st.angles[k]);
+      return `<div class="section-head"><h3>${cat === 'boulder' ? 'Bouldering' : 'Routes'}</h3><span class="muted sm">${st.sessions} sessions · ${st.perWeek.toFixed(1)}/week</span></div>
+        <div class="stats3"><div class="stat"><div class="muted sm">Hardest send</div><b>${L(st.max)}</b></div><div class="stat"><div class="muted sm">${cat === 'boulder' ? 'Flash' : 'Flash/onsight'}</div><b>${L(st.flash)}</b></div><div class="stat"><div class="muted sm">Top-5 average</div><b>${L(st.top5)}</b></div></div>
+        <div class="stats3"><div class="stat"><div class="muted sm">Climbs</div><b>${st.n}</b></div><div class="stat"><div class="muted sm">Send rate</div><b>${pct(st.sendRate)}</b></div><div class="stat"><div class="muted sm">Tries per send</div><b>${st.triesPerSend ? st.triesPerSend.toFixed(1) : '–'}</b></div></div>
+        <div class="card"><b>Grade pyramid</b><div class="sm muted">Sends (solid) and attempts per grade. A healthy pyramid has 2–3 sends at each grade below your max.</div>
+          ${st.pyramid.map(p => `<div class="hbar pyr"><span>${esc(p.g)}</span><div><div style="width:${p.tried / maxN * 100}%" class="tried"><div style="width:${p.tried ? p.sent / p.tried * 100 : 0}%"></div></div></div><span>${p.sent}/${p.tried}</span></div>`).join('')}</div>
+        ${st.trend.length > 1 ? `<div class="card"><b>Hardest send per session</b>${lineChart(st.trend, { label: 'hardest send', fmt: L })}</div>` : ''}
+        ${angles.length ? `<div class="card"><b>By wall angle</b><div class="sm muted">Average sent grade. A big gap shows the style to train.</div>${angles.map(([k, l]) => `<div class="li static"><span>${l}</span><span class="sm muted">${st.angles[k].n} sends · avg ${L(st.angles[k].avg)}</span></div>`).join('')}</div>` : ''}`;
+    };
+    this.openSheet('climbing', 'Climbing stats', () => {
+      const f = Climb.fingers(), streak = Climb.fingerDays();
+      const body = block('boulder') + block('route');
+      return `<div class="chips">${[[30, '30 days'], [90, '90 days'], [365, '1 year']].map(([n, l]) => `<button class="chip ${days === n ? 'on' : ''}" data-a="climbDays" data-id="${n}">${l}</button>`).join('')}</div>
+        ${body || '<div class="empty">Log a climbing session (Bouldering, Lead Climbing, Board Climbing and others) to see your grade pyramid and stats.</div>'}
+        <div class="section-head"><h3>Fingers</h3></div>
+        <div class="card">${f ? `${f.hang ? `<div class="li static"><span>Strongest hang</span><b>${f.hang.pct}% body weight</b></div><div class="sm muted">${esc(f.hang.name)}: ${f.hang.w ? '+' + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s on ${fmtDate(f.hang.date)}. Around 150% for 10s on a 20 mm edge is typical of V8 / 7c+ climbers.</div>` : ''}
+          ${f.lift ? `<div class="li static"><span>Strongest block lift</span><b>${f.lift.pct}% body weight</b></div>` : ''}` : `<div class="sm">Log <b>Max Hang (Added Weight)</b> or a block lift, and set your body weight in Settings, to see finger strength as a % of body weight.</div>`}
+          <div class="sm muted" style="padding-top:6px">${streak ? `${streak} day(s) in a row on your fingers. ${streak >= 3 ? 'Take a rest day soon. Pulleys recover slowly.' : ''}` : 'Fingers rested.'}</div></div>`;
+    });
+  },
+
   openExDetail(id) {
     const ex = Store.ex(id);
     const hist = Store.sessions(id, 60).slice().reverse();
@@ -265,6 +353,8 @@ Object.assign(UI, {
         <div class="card"><b>Best set weight</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.map(s => +s.w || 0)) })), { label: 'heaviest weight' })}</div>
         <div class="card"><b>Session volume</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.w || 0) * (+s.r || 0), 0) })), { label: 'volume', fmt: Math.round })}</div>`;
     } else if (ex.type === 'bw') charts = `<div class="card"><b>Most reps in a set</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.map(s => +s.r || 0)) })), { label: 'max reps' })}</div><div class="card"><b>Total reps</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.r || 0), 0) })), { label: 'total reps' })}</div>`;
+    else if (ex.type === 'wdur') charts = `<div class="card"><b>Heaviest hold (${U()})</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.filter(s => (+s.t || 0) >= 5).map(s => +s.w || 0), 0) })), { label: 'heaviest hold' })}</div>${(() => { const f = Climb.fingers(); return f && f.hang && !Climb.LIFT.includes(ex.id) ? `<div class="card sm">Strongest hang: <b>${f.hang.pct}% of body weight</b> (${f.hang.w ? '+' + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s).</div>` : ''; })()}`;
+    else if (ex.type === 'climb') { const cat = Climb.cat(ex); charts = `<div class="card"><b>Hardest send per session</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(-1, ...h.sets.filter(s => s.sent).map(s => Climb.value(s.g, cat)).filter(v => v != null)) })).filter(p => p.y > -1), { label: 'hardest send', fmt: v => Climb.label(v, cat) })}</div><button class="btn wide" data-a="climbStats">${icon('chart-bar')} Climbing stats: pyramid, flash grade, send rate</button>`; }
     else if (ex.type === 'dur') charts = `<div class="card"><b>Longest hold or round (sec)</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.map(s => +s.t || 0)) })), { label: 'longest' })}</div>`;
     else if (ex.type === 'dist') charts = `<div class="card"><b>Distance (km)</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.d || 0), 0) })), { label: 'distance' })}</div>
       <div class="card"><b>Pace (min/km)</b>${lineChart(hist.filter(h => h.sets[0].d).map(h => ({ x: h.date, y: h.sets[0].t / h.sets[0].d / 60 })), { label: 'pace', fmt: v => fmtDur(v * 60) })}</div>`;
@@ -273,7 +363,9 @@ Object.assign(UI, {
     const ladder = Coach.ladderFor(id);
     this.openSheet('exdetail', esc(ex.name), () => `
       <div class="chips"><span class="chip">${MUSCLES[ex.muscle] || ex.muscle}</span>${(ex.secondary || []).map(m => `<span class="chip ghost">${MUSCLES[m] || m}</span>`).join('')}<span class="chip ghost">${ex.equipment}</span>${ladder ? `<span class="chip ghost">${icon('stairs-up')} ${esc(ladder.name)}</span>` : ''}</div>
-      <div class="coach ${sug.kind}"><div class="coach-head">${icon('sparkles')}<b>${esc(sug.title)}</b></div><div class="sm">${esc(sug.text)}</div></div>
+      ${(() => { const h = howTo(ex); return `<div class="card howto"><b>${icon('list-check')} How to do it</b><p class="sm">${esc(h.steps)}</p><p class="sm muted">${icon('bulb')} ${esc(h.tip)}</p><p class="sm muted">${icon('pencil')} ${esc(trackingText(ex))}</p></div>`; })()}
+      <div class="coach ${sug.kind}"><div class="coach-head">${icon('sparkles')}<b>Coach: ${esc(sug.title)}</b></div><div class="sm">${esc(sug.text)}</div></div>
+      <button class="btn primary wide" data-a="quickStart" data-id="${id}">${icon('player-play')} Start a workout with this</button>
       <div class="card center">${BodyMap.svg({}, 'sets', { primary: ex.muscle, secondary: ex.secondary })}<div class="bm-legend sm muted"><span class="bm-3">■</span> Main <span class="bm-1">■</span> Also works</div></div>
       <button class="btn wide" data-a="watchDemo" data-id="${id}">${icon('brand-youtube')} Watch how to do it</button>
       ${(ex.type === 'wr' || ex.type === 'wbw') && hist.length ? `<div class="stats3"><div class="stat"><div class="muted sm">Heaviest</div><b>${fmtW(b.w)}</b></div><div class="stat"><div class="muted sm">Best e1RM</div><b>${Math.round(b.e1)}</b></div><div class="stat"><div class="muted sm">Best set vol.</div><b>${fmtNum(b.vol)}</b></div></div>` : ''}
@@ -305,14 +397,20 @@ Object.assign(UI, {
       cardio: 'Log distance and time. The coach applies the 10% rule for distance and nudges your pace. You can import GPX and TCX files from Strava, Garmin and other trackers.',
       combat: 'Use the round timers, then log rounds. The coach adds rounds over time.',
       mobility: 'Timed holds. The coach adds about 10% hold time each session.',
-      climbing: 'Log each climb\'s grade and whether you sent it. After 3 sends at your top grade, the coach suggests projecting the next grade.',
+      climbing: 'Log each climb with its grade, tries, result (flash, redpoint, project) and wall angle. After 3 sends at your top grade the coach moves your project up a grade and plans a pyramid session. Max hangs track added weight, so you can see finger strength as a % of body weight. Choose V or Font, YDS or French grades in Settings.',
       calisthenics: 'Follow the skill ladders. Once you hit a step\'s goal, the coach tells you to move up.',
       conditioning: 'Interval timers keep running with the screen off, using notifications.',
       strength: 'Double progression: add reps until you top the range, then add weight.'
     }[key];
-    this.openSheet('disc', d.name, () => `<p class="sm muted">${extra}</p>
-      ${timers.length ? `<div class="grid3">${timers.map(t => `<button class="card tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<b>${TIMER_PRESETS[t].name}</b></button>`).join('')}</div>` : ''}
-      <div class="card list">${list.map(e => `<div class="li"><button class="grow left" data-a="exDetail" data-id="${e.id}"><b>${esc(e.name)}</b><span class="sm muted">${MUSCLES[e.muscle] || ''}</span></button><button class="btn sm" data-a="quickStart" data-id="${e.id}">Start</button></div>`).join('')}</div>`);
+    this.disc = { q: '', grp: 'all' };
+    this.openSheet('disc', d.name, () => `<div class="card tip-card sm"><b>${icon(d.icon)} How ${esc(d.name.toLowerCase())} works here</b><p>${extra}</p><p class="muted">Tap any exercise to see how to do it. Tap Start to begin a workout with it.</p></div>
+      ${key === 'climbing' ? `<button class="btn wide" data-a="climbStats">${icon('chart-bar')} Climbing stats</button>` : ''}
+      ${timers.length ? `<div class="section-head"><h3>Timers</h3></div><div class="timer-tiles">${timers.map(t => `<button class="card timer-tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<span><b>${TIMER_PRESETS[t].name}</b><span class="sm muted">${esc(TIMER_PRESETS[t].about)}</span></span></button>`).join('')}</div>` : ''}
+      <div class="section-head"><h3>Exercises</h3></div>
+      <input class="search" type="search" data-f="discq" placeholder="Search ${list.length} exercises" value="${esc(this.disc.q)}" aria-label="Search exercises">
+      <div class="chips scroll-x">${['all', ...new Set(list.map(exGroup))].map(g => `<button class="chip ${this.disc.grp === g ? 'on' : ''}" data-a="discGroup" data-id="${esc(g)}">${g === 'all' ? 'All' : esc(g)}</button>`).join('')}</div>
+      <div id="discList">${this.discList(key)}</div>`);
+    this.top().discKey = key;
   },
 
   openLadder(id) {
@@ -325,9 +423,11 @@ Object.assign(UI, {
 
   openTimerSetup(type) {
     const p = TIMER_PRESETS[type];
-    this.tconf = { type, name: p.name, work: p.work, rest: p.rest, rounds: p.rounds, prep: 10 };
+    this.tconf = { type, name: p.name, work: p.work, rest: p.rest, rounds: p.rounds, prep: 10, moves: (p.moves || []).slice() };
     const f = (k, label, unit) => `<label class="field">${label}<div class="row"><input inputmode="numeric" data-tc="${k}" value="${this.tconf[k]}"><span class="muted sm">${unit}</span></div></label>`;
     this.openSheet('tsetup', p.name + ' timer', () => `
+      <div class="card tip-card sm"><b>${icon(p.icon)} What is ${esc(p.name)}?</b><p>${esc(p.about)}</p><b>How to do it</b><ol>${p.how.map(x => `<li>${esc(x)}</li>`).join('')}</ol></div>
+      ${type === 'bjj' ? '' : `<label class="field">${type === 'amrap' ? 'Circuit' : type === 'emom' ? 'Each minute' : 'Moves'} <span class="muted sm">(one per line${type === 'amrap' ? '' : ', rotates each round'})</span><textarea data-tc="moves" rows="${Math.max(3, this.tconf.moves.length)}">${esc(this.tconf.moves.join('\n'))}</textarea></label>`}
       ${type === 'amrap' ? f('work', 'Time cap', 'seconds') : f('work', type === 'emom' ? 'Interval' : 'Work', 'seconds')}
       ${type === 'amrap' || type === 'emom' ? '' : f('rest', 'Rest', 'seconds')}
       ${type === 'amrap' ? '' : f('rounds', type === 'emom' ? 'Minutes' : 'Rounds', '')}
@@ -346,7 +446,11 @@ Object.assign(UI, {
         ${T.conf.type === 'amrap' ? `<div class="center big">${T.amrapRounds} rounds</div>` : ''}
         <button class="btn primary wide" data-a="timerSave">${icon('device-floppy')} Save to history</button><button class="btn wide" data-a="closeSheet">Close without saving</button>`;
       return `<div class="timer ${ph.kind}"><svg viewBox="0 0 200 200" class="ring"><circle cx="100" cy="100" r="90" class="ring-bg"/><circle id="tRing" cx="100" cy="100" r="90" class="ring-fg" style="stroke-dasharray:565;stroke-dashoffset:0"/></svg>
-        <div class="timer-in"><div class="phase">${esc(ph.label)}</div><div class="tbig" id="tLeft">${fmtDur(ph.secs)}</div><div class="sm muted">${T.phases[T.i + 1] ? 'Next: ' + esc(T.phases[T.i + 1].label) : 'Final interval'}</div></div></div>
+        <div class="timer-in"><div class="phase">${esc(ph.label)}</div><div class="tbig" id="tLeft">${fmtDur(ph.secs)}</div><div class="sm muted">${T.phases[T.i + 1] ? 'Next: ' + esc(T.phases[T.i + 1].move || T.phases[T.i + 1].label) : 'Final interval'}</div></div></div>
+        ${(() => { const mv = T.conf.moves || []; if (!mv.length) return '';
+          if (T.conf.type === 'amrap') return `<div class="card timer-move"><div class="muted sm">Circuit, in order</div>${mv.map(m => `<div class="big-move">${esc(m)}</div>`).join('')}</div>`;
+          const cur = ph.kind === 'work' ? ph.move : (T.phases[T.i + 1] && T.phases[T.i + 1].move);
+          return cur ? `<div class="card timer-move ${ph.kind}"><div class="muted sm">${ph.kind === 'work' ? 'Do now' : 'Get ready for'}</div><div class="big-move">${esc(cur)}</div></div>` : ''; })()}
         ${T.conf.type === 'amrap' ? `<button class="btn wide big-btn" data-a="timerRound">${icon('plus')} Round done (${T.amrapRounds})</button>` : ''}
         <div class="grid2"><button class="btn big-btn" data-a="timerPause">${icon(T.paused ? 'player-play' : 'player-pause')} ${T.paused ? 'Resume' : 'Pause'}</button><button class="btn big-btn danger-ghost" data-a="timerStop">${icon('player-stop')} Stop</button></div>`;
     }, { onClose: () => { if (!Timer.finished) Timer.stop(); } });
@@ -412,6 +516,8 @@ Object.assign(UI, {
         <label class="field">Weekly workout goal<input inputmode="numeric" data-setting="weekGoal" value="${s.weekGoal}"></label>
         <label class="field">Bar weight (${s.unit})<input inputmode="decimal" data-setting="bar" value="${s.bar}"></label>
         <label class="field">Body weight (${s.unit})<input inputmode="decimal" data-setting="bodyweight" value="${s.bodyweight}"></label>
+        <label class="field">Boulder grades<select data-setting="boulderScale">${['V', 'Font'].map(k => `<option value="${k}" ${Climb.system('boulder') === k ? 'selected' : ''}>${GRADE_SYSTEMS[k].name}</option>`).join('')}</select></label>
+        <label class="field">Route grades<select data-setting="routeScale">${['YDS', 'French'].map(k => `<option value="${k}" ${Climb.system('route') === k ? 'selected' : ''}>${GRADE_SYSTEMS[k].name}</option>`).join('')}</select></label>
       </div>
       <div class="field">Workout reminders
         <div class="chips" style="margin-top:6px">${[[2, 'Mon'], [3, 'Tue'], [4, 'Wed'], [5, 'Thu'], [6, 'Fri'], [7, 'Sat'], [1, 'Sun']].map(([n, l]) => `<button class="chip ${((s.reminders || {}).days || []).includes(n) ? 'on' : ''}" data-a="toggleReminder" data-id="${n}" aria-pressed="${((s.reminders || {}).days || []).includes(n)}">${l}</button>`).join('')}</div>

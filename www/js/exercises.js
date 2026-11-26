@@ -1,6 +1,6 @@
 // Exercise library.
 // type: wr = weight x reps, bw = bodyweight reps, wbw = weighted bodyweight (added load),
-//       dur = timed hold/round, dist = distance + time, climb = grade + attempts
+//       dur = timed hold/round, wdur = weight + hold time (max hangs), dist = distance + time, climb = grade + attempts
 // discipline: strength, calisthenics, cardio, mobility, combat, climbing, conditioning
 'use strict';
 
@@ -202,7 +202,37 @@ const RAW_EXERCISES = [
   ['Top Rope Climbing', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
   ['Lead Climbing', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
   ['Hangboard Hang', 'forearms', '', 'other', 'dur', 'climbing', 0],
-  ['Campus Board', 'forearms', 'lats', 'other', 'bw', 'climbing', 0]
+  ['Campus Board', 'forearms', 'lats', 'other', 'bw', 'climbing', 0],
+  ['Outdoor Bouldering', 'forearms', 'lats,full_body', 'none', 'climb', 'climbing', 0],
+  ['Board Climbing', 'forearms', 'lats,full_body', 'none', 'climb', 'climbing', 0],
+  ['Spray Wall', 'forearms', 'lats,full_body', 'none', 'climb', 'climbing', 0],
+  ['Sport Climbing (Outdoor)', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
+  ['Trad Climbing', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
+  ['Multi-pitch Climbing', 'forearms', 'lats,full_body', 'none', 'climb', 'climbing', 0],
+  ['Auto-belay Laps', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
+  ['Deep Water Solo', 'forearms', 'lats', 'none', 'climb', 'climbing', 0],
+  ['Speed Climbing', 'forearms', 'lats,quads', 'none', 'dur', 'climbing', 0],
+  ['Max Hang (Added Weight)', 'forearms', 'lats', 'other', 'wdur', 'climbing', 0],
+  ['Repeaters (7:3)', 'forearms', '', 'other', 'dur', 'climbing', 0],
+  ['Minimum Edge Hang', 'forearms', '', 'other', 'dur', 'climbing', 0],
+  ['One-arm Hang', 'forearms', 'lats', 'other', 'dur', 'climbing', 0],
+  ['No-hang Block Lift', 'forearms', '', 'other', 'wdur', 'climbing', 0],
+  ['Pinch Block Lift', 'forearms', '', 'other', 'wdur', 'climbing', 0],
+  ['Campus Ladder', 'forearms', 'lats', 'other', 'bw', 'climbing', 0],
+  ['4x4 Bouldering', 'forearms', 'lats,full_body', 'none', 'dur', 'climbing', 0],
+  ['ARC Traversing', 'forearms', 'lats', 'none', 'dur', 'climbing', 0],
+  ['Lock-off Hold', 'lats', 'biceps,forearms', 'bodyweight', 'dur', 'climbing', 0],
+  ['Offset Pull-up', 'lats', 'biceps', 'bodyweight', 'bw', 'climbing', 1],
+  ['Typewriter Pull-up', 'lats', 'biceps', 'bodyweight', 'bw', 'climbing', 1],
+  ['Frenchies', 'lats', 'biceps', 'bodyweight', 'bw', 'climbing', 1],
+  ['Front Lever Row', 'lats', 'abs,upper_back', 'bodyweight', 'bw', 'climbing', 1],
+  ['Finger Roll (Barbell)', 'forearms', '', 'barbell', 'wr', 'climbing', 0],
+  ['Reverse Wrist Curl', 'forearms', '', 'dumbbell', 'wr', 'climbing', 0],
+  ['Finger Extensor (Band)', 'forearms', '', 'band', 'bw', 'climbing', 0],
+  ['Rice Bucket', 'forearms', '', 'other', 'dur', 'climbing', 0],
+  ['Shoulder External Rotation (Band)', 'shoulders', 'upper_back', 'band', 'bw', 'climbing', 0],
+  ['Frog Stretch', 'mobility', 'adductors', 'none', 'dur', 'mobility', 0],
+  ['High Step Mobility', 'mobility', 'glutes,adductors', 'none', 'bw', 'mobility', 0]
 ];
 
 function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
@@ -327,6 +357,18 @@ const PROGRAMS = [
   { id: 'climb', name: 'Climber strength', goal: 'sport', level: 'Intermediate', days: 2, equip: 'Hangboard', desc: 'Finger strength, pulling power and core for climbing.', routines: [
     ['Fingers and pull', [['hangboard_hang', 6, 7, 10], ['pull_up_weighted', 4, 3, 6], ['archer_pull_up', 3, 3, 6], ['hanging_leg_raise', 3, 8, 12]]],
     ['Antagonist and core', [['push_up', 3, 12, 20], ['overhead_press_barbell', 3, 6, 10], ['wrist_curl_dumbbell', 3, 15, 20], ['tuck_front_lever', 4, 8, 15], ['dragon_flag', 3, 3, 6]]]] },
+  { id: 'climb_start', name: 'First-year climber', goal: 'sport', level: 'Beginner', days: 3, equip: 'Climbing gym', desc: 'Lots of easy climbing for technique, plus safe strength work. No hangboard yet.', routines: [
+    ['Technique session', [['bouldering', 12, 0, 0], ['lock_off_hold', 3, 5, 10], ['hanging_leg_raise', 3, 8, 12]]],
+    ['Ropes and pulling', [['top_rope_climbing', 6, 0, 0], ['pull_up', 3, 5, 10], ['shoulder_external_rotation_band', 3, 12, 15]]],
+    ['Strength and antagonists', [['dead_hang', 3, 20, 40], ['push_up', 3, 10, 20], ['reverse_wrist_curl', 3, 15, 20], ['finger_extensor_band', 3, 15, 25], ['frog_stretch', 2, 45, 60]]]] },
+  { id: 'boulder_power', name: 'Bouldering power', goal: 'sport', level: 'Advanced', days: 3, equip: 'Climbing gym and hangboard', desc: 'Limit bouldering, max hangs and campusing to push your top grade.', routines: [
+    ['Limit bouldering', [['bouldering', 8, 0, 0], ['max_hang_added_weight', 5, 7, 10], ['front_lever_row', 3, 5, 8]]],
+    ['Board and power', [['board_climbing', 8, 0, 0], ['campus_ladder', 4, 3, 6], ['pull_up_weighted', 4, 3, 5], ['typewriter_pull_up', 3, 3, 6]]],
+    ['Antagonists and mobility', [['push_up', 3, 12, 20], ['shoulder_external_rotation_band', 3, 12, 15], ['reverse_wrist_curl', 3, 15, 20], ['frog_stretch', 2, 45, 60], ['high_step_mobility', 2, 8, 12]]]] },
+  { id: 'route_endurance', name: 'Route endurance', goal: 'sport', level: 'Intermediate', days: 3, equip: 'Climbing gym and hangboard', desc: 'Stop getting pumped: ARC, 4x4s and repeaters for sport and trad climbers.', routines: [
+    ['Aerobic base', [['arc_traversing', 2, 900, 1200], ['repeaters_7_3', 4, 42, 70], ['lock_off_hold', 3, 5, 10]]],
+    ['Power endurance', [['4x4_bouldering', 4, 240, 300], ['frenchies', 3, 3, 5], ['hanging_leg_raise', 3, 8, 12]]],
+    ['Route volume', [['lead_climbing', 6, 0, 0], ['auto_belay_laps', 4, 0, 0], ['reverse_wrist_curl', 3, 15, 20]]]] },
 
   // ---------- Mobility
   { id: 'mob', name: 'Daily mobility', goal: 'mobility', level: 'Beginner', days: 7, equip: 'None', desc: '15 minutes, every day. Hips, spine and shoulders.', routines: [

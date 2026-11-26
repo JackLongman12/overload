@@ -139,6 +139,12 @@ const Actions = {
 
   // ----- Details
   exDetail(el, d) { this.openExDetail(d.id); },
+  climbStats() { this.openClimbing(); },
+  programDetail(el, d) { this.openProgramDetail(d.id); },
+  discGroup(el, d) { this.disc = { ...(this.disc || { q: '' }), grp: d.id }; this.refreshSheet(); },
+  toggleHow(el, d) { const e = Store.data.active.exercises[+d.i]; e.showHow = !e.showHow; Store.save(); this.refreshSheet(); },
+  hideLogTips() { Store.data.settings.hideLogTips = true; Store.save(); this.refreshSheet(); },
+  climbDays(el, d) { this._climbDays = +d.id; this.refreshSheet(); },
   allExercises() { this.openLibrary(); },
   workoutDetail(el, d) { this.openWorkoutDetail(d.id); },
   repeatWorkout(el, d) {
