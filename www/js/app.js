@@ -9,6 +9,7 @@ const UI = {
 
   async init() {
     await Store.load();
+    await Sync.load();
     this.bind();
     this.render();
     setInterval(() => this.tick(), 1000);
@@ -16,7 +17,7 @@ const UI = {
     const app = Plugin('App');
     if (app) {
       app.addListener('backButton', () => this.back());
-      app.addListener('resume', () => this.tick());
+      app.addListener('resume', () => { this.tick(); Sync.schedule(800); });
     }
     if (!Store.data.onboarded) this.openWelcome();
     else if (Store.data.active) toast('Workout in progress. Tap the banner to resume.');
@@ -49,6 +50,10 @@ const UI = {
     else if (u === 'apk') ub.innerHTML = `<div class="updbar">${icon('brand-android')} A new app version is available <button class="btn sm primary" data-a="openApk">Download</button></div>`;
     else if (u === 'web') ub.innerHTML = `<div class="updbar">${icon('refresh')} New version ${esc(Updater.info.version)} <button class="btn sm primary" data-a="applyUpdate">Reload</button></div>`;
     else ub.innerHTML = '';
+  },
+  onSyncState() {
+    const el = $('#syncLabel'); if (el) el.textContent = Sync.label();
+    if (this.stack.length && this.top().key === 'account') this.refreshSheet();
   },
   onUpdateState() { this.renderBanner(); if (this.stack.length && this.top().key === 'settings') this.refreshSheet(); },
 
@@ -190,6 +195,7 @@ const UI = {
     <div class="card"><div class="row-between"><b>Progress photos</b><label class="btn sm">${icon('camera')} Add<input type="file" accept="image/*" data-a-change="addPhoto" hidden></label></div>
       <div class="photos">${Store.photos.slice().reverse().slice(0, 9).map(p => `<button data-a="viewPhoto" data-id="${p.id}"><img src="${Photos.src(p)}" alt="Progress photo, ${fmtDate(p.date)}"><span>${fmtDate(p.date, { day: 'numeric', month: 'short' })}</span></button>`).join('') || '<div class="sm muted">Photos stay on this phone.</div>'}</div></div>
     <div class="card list">
+      <button class="li" data-a="account">${icon('cloud')}<span>Account and sync</span><span class="muted sm" id="syncLabel">${Sync.label()}</span></button>
       <button class="li" data-a="settings">${icon('settings')}<span>Settings</span>${icon('chevron-right', 'muted')}</button>
       <button class="li" data-a="dataSheet">${icon('file-import')}<span>Import, export and sync</span>${icon('chevron-right', 'muted')}</button>
       <button class="li" data-a="updates">${icon('refresh')}<span>App updates</span><span class="muted sm">v${esc(Updater.bundleVersion)}</span></button>
@@ -321,12 +327,13 @@ const UI = {
     const w = { id: a.id, name: a.name, routineId: a.routineId, start: a.start, end: Date.now(), notes: a.notes || '', readiness: a.readiness,
       exercises: a.exercises.map(e => ({ exId: e.exId, target: e.target, notes: e.notes, ss: e.ss, rest: e.rest, sets: e.sets.filter(s => s.done).map(({ p, ...s }) => s) })).filter(e => e.sets.length) };
     const prs = findPRs(w);
-    w.prs = prs.length;
+    w.prs = prs.length; w.u = Date.now();
     Store.data.workouts.push(w); Store.data.active = null; Store.save(true);
     this.restEnd = 0; Notify.cancel(REST_NOTIF);
     this.stack = []; this.render();
     beep(1046, 150); setTimeout(() => beep(1318, 250), 160); buzz([80]);
     this.openSheet('summary', 'Workout complete', () => summaryBody(w, prs));
+    Sync.run('finish');
   },
 
   discard() { Store.data.active = null; Store.save(true); this.restEnd = 0; Notify.cancel(REST_NOTIF); this.stack = this.stack.filter(s => s.key !== 'workout'); this.renderSheets(); this.render(); },
@@ -414,7 +421,7 @@ const UI = {
       else if (['rest', 'bar', 'bodyweight', 'weekGoal'].includes(ds.setting)) s[ds.setting] = num(v);
       else s[ds.setting] = v;
       Store.save();
-      if (isChange && ['unit', 'autoUpdate'].includes(ds.setting)) this.refreshSheet();
+      if (isChange && ['unit', 'autoUpdate', 'autoSync'].includes(ds.setting)) this.refreshSheet();
     }
     if (ds.ci) { this.ci[ds.ci] = +v; const out = $('#ci-' + ds.ci); if (out) out.textContent = v; const sc = $('#ciScore'); if (sc) sc.textContent = readinessScore(this.ci); }
     if (ds.tc) { this.tconf[ds.tc] = ds.tc === 'name' ? v : num(v); const s = $('#tcSum'); if (s) s.textContent = timerSummary(this.tconf); }

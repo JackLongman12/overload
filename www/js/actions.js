@@ -30,11 +30,12 @@ const Actions = {
   rRemove(el, d) { this.draft.exercises.splice(+d.i, 1); this.refreshSheet(); },
   rSave() {
     const d = this.draft; if (!d.name.trim()) return toast('Give the routine a name');
+    d.u = Date.now();
     const rs = Store.data.routines, i = rs.findIndex(r => r.id === d.id);
     if (i >= 0) rs[i] = d; else rs.push(d);
     Store.save(true); this.closeSheet(); toast('Routine saved');
   },
-  rDelete() { if (!confirm('Delete this routine? Your workout history is kept.')) return; Store.data.routines = Store.data.routines.filter(r => r.id !== this.draft.id); Store.save(true); this.closeSheet(); },
+  rDelete() { if (!confirm('Delete this routine? Your workout history is kept.')) return; Store.tombstone(this.draft.id); Store.data.routines = Store.data.routines.filter(r => r.id !== this.draft.id); Store.save(true); this.closeSheet(); },
   programs() { this.openPrograms(); },
   progGoal(el, d) { this.progGoal = d.id; this.refreshSheet(); },
   addProgram(el, d) {
@@ -140,7 +141,7 @@ const Actions = {
     const w = Store.data.workouts.find(x => x.id === d.id);
     this.stack = []; this.beginWorkout(() => this.newWorkout(w.name, { id: w.routineId, exercises: w.exercises.map(e => ({ exId: e.exId, sets: e.sets.filter(s => s.type !== 'W').length, repMin: (e.target || {}).repMin, repMax: (e.target || {}).repMax, rest: e.rest })) }));
   },
-  deleteWorkout(el, d) { if (!confirm('Delete this workout from history? This can\'t be undone.')) return; Store.data.workouts = Store.data.workouts.filter(w => w.id !== d.id); Store.save(true); this.closeSheet(); toast('Workout deleted'); },
+  deleteWorkout(el, d) { if (!confirm('Delete this workout from history? This can\'t be undone.')) return; Store.tombstone(d.id); Store.data.workouts = Store.data.workouts.filter(w => w.id !== d.id); Store.save(true); this.closeSheet(); toast('Workout deleted'); },
 
   // ----- Disciplines, ladders, timers, tools
   discipline(el, d) { this.openDiscipline(d.id); },
@@ -163,7 +164,7 @@ const Actions = {
     Store.data.measurements.push(m); if (m.weight) Store.data.settings.bodyweight = m.weight; Store.save(true); this.closeSheet(); toast('Measurements saved');
   },
   measureList() { this.openMeasureList(); },
-  deleteMeasure(el, d) { Store.data.measurements = Store.data.measurements.filter(m => m.id !== d.id); Store.save(true); this.refreshSheet(); },
+  deleteMeasure(el, d) { Store.tombstone(d.id); Store.data.measurements = Store.data.measurements.filter(m => m.id !== d.id); Store.save(true); this.refreshSheet(); },
   async addPhoto(el) {
     const f = el.files && el.files[0]; if (!f) return;
     try { const src = await resizeImage(f, 1080); if (await Photos.add(src)) { toast('Photo added'); this.render(); } }
@@ -179,6 +180,34 @@ const Actions = {
   onboardDone() { Store.data.onboarded = true; Store.save(true); this.closeSheet(); },
   disclaimer() { this.openSheet('disclaimer', 'Health and safety', () => DISCLAIMER_HTML); },
   privacy() { const url = 'https://github.com/JackLongman12/overload/blob/main/PRIVACY.md'; const br = Plugin('Browser'); if (br) br.open({ url }); else window.open(url, '_blank'); },
+
+  // ----- Account and sync
+  account() { this.authMode = this.authMode || 'signup'; this.openAccount(); },
+  authMode(el, d) { this.authMode = d.id; this.authErr = ''; this.refreshSheet(); },
+  async authSubmit() {
+    const email = ($('#authEmail') || {}).value || '', pw = ($('#authPw') || {}).value || '', pw2 = ($('#authPw2') || {}).value;
+    const fail = m => { this.authErr = m; this.refreshSheet(); };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return fail('Enter a valid email address.');
+    if (pw.length < 10) return fail('Use a password of at least 10 characters.');
+    if (this.authMode === 'signup' && pw !== pw2) return fail("The passwords don't match.");
+    this.authBusy = true; this.authErr = ''; this.refreshSheet();
+    try { if (this.authMode === 'signup') await Sync.signup(email, pw); else await Sync.login(email, pw); toast(this.authMode === 'signup' ? 'Account created. Sync is on.' : 'Logged in. Your data is syncing.'); }
+    catch (e) { this.authErr = e.message; }
+    this.authBusy = false; this.refreshSheet();
+  },
+  syncNow() { Sync.run('manual'); },
+  async loadSnapshots() { try { this.snaps = await Sync.snapshots(); } catch (e) { toast(e.message); this.snaps = []; } this.refreshSheet(); },
+  async restoreSnap(el, d) {
+    if (!confirm('Replace the workouts, routines and measurements on all your devices with this backup? Changes made since then will be lost.')) return;
+    try { await Sync.restore(+d.id); toast('Backup restored'); this.render(); } catch (e) { toast('Restore failed: ' + e.message); }
+    this.refreshSheet();
+  },
+  async signOut() { if (!confirm('Sign out? Your data stays on this phone, and sync stops.')) return; await Sync.logout(); this.refreshSheet(); },
+  async deleteAccount() {
+    if (!confirm("Delete your account and all cloud data and backups? Data on this phone is kept. This can't be undone.")) return;
+    try { await Sync.deleteAccount(); toast('Account deleted'); } catch (e) { toast("Couldn't delete: " + e.message); }
+    this.refreshSheet();
+  },
 
   // ----- Settings, data, updates
   settings() { this.openSettings(); },
@@ -199,6 +228,7 @@ const Actions = {
   wipeData() {
     if (!confirm('Delete ALL workouts, routines, measurements and photos from this phone? This can\'t be undone. Export a backup first.')) return;
     if (!confirm('Are you sure? Everything will be erased.')) return;
+    if (Sync.acct) Sync.logout();
     Store.data = Store.defaults(); [...Store.photos].forEach(p => Photos.remove(p.id)); Store.photos = []; Store.save(true); Store.savePhotos(); this.stack = []; this.renderSheets(); this.nav('home');
   }
 };

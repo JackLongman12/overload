@@ -20,9 +20,9 @@ const Store = {
       schema: 1,
       settings: {
         unit: 'kg', rest: 120, bar: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25], bodyweight: 75,
-        updateUrl: 'https://raw.githubusercontent.com/JackLongman12/overload/main/update.json', autoUpdate: true, coachLevel: 'standard', weekGoal: 4, name: ''
+        updateUrl: 'https://raw.githubusercontent.com/JackLongman12/overload/main/update.json', autoUpdate: true, autoSync: true, coachLevel: 'standard', weekGoal: 4, name: ''
       },
-      customExercises: [], routines: [], workouts: [], measurements: [], checkins: [],
+      customExercises: [], routines: [], workouts: [], measurements: [], checkins: [], deleted: {},
       active: null, onboarded: false
     };
   },
@@ -50,6 +50,7 @@ const Store = {
       const s = JSON.stringify(this.data);
       try { localStorage.setItem(DB_KEY, s); } catch (e) { toast('Storage full. Export a backup.'); }
       this.writeFile(s);
+      if (typeof Sync !== 'undefined') Sync.schedule();
     };
     if (now) go(); else this._t = setTimeout(go, 300);
   },
@@ -75,6 +76,9 @@ const Store = {
     if (!fs) return;
     try { await fs.writeFile({ path: FILE_NAME, data: s, directory: 'DATA', encoding: 'utf8' }); } catch (e) { }
   },
+
+  // Remember deletions so sync removes the item on other devices too
+  tombstone(id) { (this.data.deleted = this.data.deleted || {})[id] = Date.now(); },
 
   // ---- Exercises
   allExercises() { return BUILTIN_EXERCISES.concat(this.data.customExercises); },
@@ -147,6 +151,7 @@ const Photos = {
 
   async remove(id) {
     const p = Store.photos.find(x => x.id === id), fs = Plugin('Filesystem');
+    Store.tombstone(id);
     if (p && p.path && fs) { try { await fs.deleteFile({ path: p.path, directory: 'DATA' }); } catch (e) { } }
     Store.photos = Store.photos.filter(x => x.id !== id); Store.savePhotos();
   },
@@ -171,6 +176,13 @@ const Photos = {
       catch (e) { delete p.path; }
     }
     if (changed) Store.savePhotos();
+  },
+
+  async dataUrl(p) {
+    if (p.src) return p.src;
+    const fs = Plugin('Filesystem');
+    if (p.path && fs) { try { const r = await fs.readFile({ path: p.path, directory: 'DATA' }); return 'data:image/jpeg;base64,' + r.data; } catch (e) { } }
+    return null;
   },
 
   // For backups: embed every image

@@ -1,0 +1,10 @@
+{
+  "name": "gym-app-sync",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "gym-app-sync", "database_id": "5123884d-32ca-4c71-956d-df0d3b5b7559" }
+  ]
+}

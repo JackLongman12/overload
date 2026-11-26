@@ -86,10 +86,43 @@ Object.assign(UI, {
       <div class="card list">
         <div class="li static col"><b>${icon('sparkles')} A coach that adapts</b><span class="sm muted">It suggests when to add reps, sets or weight, and when to back off.</span></div>
         <div class="li static col"><b>${icon('lock')} Private by design</b><span class="sm muted">Your workouts stay on this phone. Nothing is uploaded.</span></div>
+        <div class="li static col"><b>${icon('cloud')} Optional encrypted sync</b><span class="sm muted">Create an account in You, Account and sync to back up and use several phones. Only you can read the data.</span></div>
         <div class="li static col"><b>${icon('file-import')} Bring your history</b><span class="sm muted">Import from Hevy, Strong, FitNotes, Strava or Garmin in You, Import.</span></div>
       </div>
       ${DISCLAIMER_HTML}
       <button class="btn primary wide" data-a="onboardDone">I understand, let's train</button>`);
+  },
+
+  openAccount() {
+    this.openSheet('account', 'Account and sync', () => {
+      const a = Sync.acct;
+      if (!a || !a.token) {
+        const up = this.authMode === 'signup';
+        return `<div class="card sm">${icon('lock')} <b>End-to-end encrypted.</b> Your password never leaves this phone. It scrambles your data before upload, so the server, and anyone with access to it, can't read your workouts or photos.</div>
+        <div class="chips"><button class="chip ${up ? 'on' : ''}" data-a="authMode" data-id="signup">Create account</button><button class="chip ${!up ? 'on' : ''}" data-a="authMode" data-id="login">Log in</button></div>
+        ${a && !a.token ? `<div class="card warn-card sm">You were signed out on this device. Log in again as ${esc(a.email)}.</div>` : ''}
+        <label class="field">Email<input id="authEmail" type="email" autocomplete="email" value="${esc(a ? a.email : '')}" placeholder="you@example.com"></label>
+        <label class="field">Password<input id="authPw" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="At least 10 characters"></label>
+        ${up ? '<label class="field">Confirm password<input id="authPw2" type="password" autocomplete="new-password"></label>' : ''}
+        ${this.authErr ? `<div class="sm" style="color:var(--bad);margin-bottom:10px">${esc(this.authErr)}</div>` : ''}
+        <button class="btn primary wide" data-a="authSubmit">${this.authBusy ? 'Working…' : up ? 'Create account and sync' : 'Log in and sync'}</button>
+        ${up ? `<div class="card warn-card sm"><b>Write your password down.</b> Because only you hold the key, a forgotten password can't be reset, and the cloud copy can't be recovered. Data on your phones is never affected.</div>` : ''}
+        <p class="sm muted">Sync is optional. Without an account everything still works offline on this phone.</p>`;
+      }
+      const snaps = this.snaps;
+      return `<div class="card"><div class="li static"><span>${icon('user')} ${esc(a.email)}</span></div>
+        <div class="li static"><span>Status</span><span class="sm ${Sync.state === 'error' ? 'warn' : 'muted'}">${esc(Sync.label())}</span></div>
+        ${Sync.err ? `<div class="sm warn" style="padding:0 14px 10px">${esc(Sync.err)}</div>` : ''}</div>
+      <button class="btn primary wide" data-a="syncNow">${icon('refresh')} Sync now</button>
+      <label class="field row"><input type="checkbox" data-setting="autoSync" ${Store.data.settings.autoSync !== false ? 'checked' : ''}> Sync automatically (app start, after workouts, after changes)</label>
+      <p class="sm muted">Log in with the same account on another phone and your training merges across both. Everything is encrypted on the phone before upload.</p>
+      <div class="section-head"><h3>Cloud backups</h3><button class="link" data-a="loadSnapshots">${snaps ? 'Refresh' : 'Show'}</button></div>
+      <p class="sm muted">The server keeps a daily snapshot for the last 14 days.</p>
+      ${snaps ? (snaps.length ? `<div class="card list">${snaps.map(s => `<div class="li static"><span>${fmtDate(s.created, { weekday: 'short', day: 'numeric', month: 'short' })} ${fmtTime(s.created)}<span class="sm muted"> · ${Math.max(1, Math.round(s.size / 1024))} KB</span></span><button class="btn sm" data-a="restoreSnap" data-id="${s.id}">Restore</button></div>`).join('')}</div>` : '<div class="empty">The first backup appears a day after you start syncing.</div>') : ''}
+      <div class="section-head"><h3>Account</h3></div>
+      <button class="btn wide" data-a="signOut">${icon('logout')} Sign out</button>
+      <button class="btn wide danger-ghost" data-a="deleteAccount">${icon('trash')} Delete account and cloud data</button>`;
+    });
   },
 
   openPrograms() {

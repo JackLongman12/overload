@@ -6,3 +6,4 @@ dist/*.zip
 dist/
 .claude/
 keys/
+server/.wrangler/

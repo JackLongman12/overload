@@ -38,6 +38,19 @@ The app reads `update.json` from this repo (https://raw.githubusercontent.com/Ja
 The latest APK is always at https://github.com/JackLongman12/overload/releases.
 
 
+## Accounts and cloud sync (server/)
+Optional, end-to-end encrypted sync runs on a Cloudflare Worker with a D1 database (free tier).
+- The phone derives two keys from the password with PBKDF2: an **auth key**, which is sent and stored only as a salted hash, and an **encryption key**, which is never sent. Data and photos are gzipped and AES-GCM encrypted before upload.
+- Sync merges records by ID, and deletions sync too. Conflicts are handled with revision numbers.
+- The server keeps a daily snapshot for 14 days. You can restore one in the app.
+- Live at https://gym-app-sync.lp-reports.workers.dev
+
+To redeploy after changing `server/src/index.js`:
+```
+cd server
+npx wrangler deploy
+```
+
 ## Import and export
 **You > Import, export and sync** reads:
 - Hevy CSV
