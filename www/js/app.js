@@ -481,7 +481,7 @@ function readinessLabel(s) { return s >= 85 ? 'Primed. A good day to push for PR
 
 function warmupSets(work) {
   const bar = Store.data.settings.bar;
-  const pick = (pct, r) => ({ w: Math.max(bar, Coach.roundW(work * pct)), r });
+  const pick = (pct, r) => ({ w: Math.max(bar, Coach.roundW(work * pct, { equipment: 'barbell' })), r });
   return [{ w: bar, r: 10 }, pick(0.45, 8), pick(0.65, 5), pick(0.8, 3), pick(0.9, 1)].filter((x, i, arr) => i === 0 || x.w > arr[i - 1].w);
 }
 

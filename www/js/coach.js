@@ -15,8 +15,11 @@ const Coach = {
     return lb ? 5 : 2.5;
   },
 
-  roundW(w) {
-    const step = Store.data.settings.unit === 'lb' ? 2.5 : 1.25;
+  roundW(w, ex) {
+    const s = Store.data.settings;
+    let step = s.unit === 'lb' ? 2.5 : 1.25;
+    if (ex && ex.equipment === 'barbell') step = 2 * Math.min(...(s.plates && s.plates.length ? s.plates : [s.unit === 'lb' ? 2.5 : 1.25]));
+    else if (ex && (ex.equipment === 'dumbbell' || ex.equipment === 'kettlebell')) step = s.unit === 'lb' ? 5 : 2;
     return Math.max(0, Math.round(w / step) * step);
   },
 
@@ -51,8 +54,9 @@ const Coach = {
   // Main entry. Returns {kind, title, text, sets:[{w,r,t,d}], tag}
   suggest(exId, target) {
     const ex = Store.ex(exId);
-    const t = { ...this.defaultTarget(ex), ...(target || {}) };
     const hist = Store.sessions(exId, 8);
+    const lastTarget = hist.find(h => h.target) || {};
+    const t = { ...this.defaultTarget(ex), ...(lastTarget.target || {}), ...(target || {}) };
     const ready = this.readiness();
     let s;
     if (ex.type === 'dur') s = this.suggestDuration(ex, t, hist);
@@ -65,7 +69,7 @@ const Coach = {
     if (ready != null && s.sets && s.sets.length && hist.length) {
       if (ready < 45) {
         s.sets = s.sets.slice(0, Math.max(1, s.sets.length - 1));
-        if (ex.type === 'wr' || ex.type === 'wbw') s.sets = s.sets.map(x => ({ ...x, w: x.w ? this.roundW(x.w * 0.92) : x.w }));
+        if (ex.type === 'wr' || ex.type === 'wbw') s.sets = s.sets.map(x => ({ ...x, w: x.w ? this.roundW(x.w * 0.92, ex) : x.w }));
         s.text += ` Readiness is low (${ready}), so today is lighter: one set fewer and about 8% less weight.`;
         s.tag = 'light day';
       } else if (ready >= 85 && s.kind === 'reps') {
@@ -91,11 +95,13 @@ const Coach = {
     const rpes = work.map(s => +s.rpe).filter(Boolean);
     const avgRpe = rpes.length ? rpes.reduce((a, b) => a + b, 0) / rpes.length : null;
 
-    // Stall: no e1RM progress across the last 3 sessions vs the one before.
+    // Stall: none of the last 3 sessions beat the session before them on e1RM, top weight,
+    // or total reps at that weight (reps count, so high-rep work isn't misread).
     let stalled = false;
     if (hist.length >= 4) {
-      const e = hist.slice(0, 4).map(h => this.bestE1(h.sets));
-      stalled = Math.max(e[0], e[1], e[2]) <= e[3] * 1.01;
+      const score = h => { const w = Math.max(...h.sets.map(s => +s.w || 0)); return { e1: this.bestE1(h.sets), w, reps: h.sets.filter(s => (+s.w || 0) >= w).reduce((a, s) => a + (+s.r || 0), 0) }; };
+      const base = score(hist[3]);
+      stalled = !hist.slice(0, 3).some(h => { const x = score(h); return x.e1 > base.e1 * 1.01 || x.w > base.w || (x.w === base.w && x.reps > base.reps); });
     }
     let failStreak = 0;
     for (const h of hist) { if (h.sets.some(s => +s.r < t.repMin)) failStreak++; else break; }
@@ -104,21 +110,27 @@ const Coach = {
     const weekly = this.weeklySets()[ex.muscle] || 0;
     const mk = (w, r, n = nSets) => Array.from({ length: n }, () => ({ w, r }));
 
-    if (stalled && (failStreak >= 1 || hist.length >= 5)) {
-      const w = this.roundW(topW * 0.9);
+    if (stalled && failStreak === 0) {
+      const sets = work.map(s => ({ w: topW, r: Math.min(t.repMax, (+s.r || 0) + 1) }));
+      return { kind: 'push', title: 'Flat for 3 sessions: push harder', tag: 'push',
+        text: `You're hitting your reps but not progressing. Take the last set to 1 rep short of failure and aim for one more rep per set. If you're already maxing out, add a set or try ${this.variations(ex).slice(0, 1).map(e => e.name).join('') || 'a variation'}.`,
+        sets };
+    }
+    if (stalled) {
+      const w = this.roundW(topW * 0.9, ex);
       const alt = this.variations(ex).slice(0, 2).map(e => e.name);
       return { kind: 'deload', title: 'Plateau, so deload', tag: 'deload',
-        text: `Your estimated 1RM hasn't moved in 3 sessions. Drop about 10% to ${w} ${unit} for ${t.repMax} reps and build back up.` + (alt.length ? ` A variation for a few weeks can also break the stall: ${alt.join(' or ')}.` : ''),
+        text: `No progress in 3 sessions and you're missing reps. Drop about 10% to ${w} ${unit} for ${t.repMax} reps and build back up.` + (alt.length ? ` A variation for a few weeks can also break the stall: ${alt.join(' or ')}.` : ''),
         sets: mk(w, t.repMax) };
     }
     if (failStreak >= 2) {
-      const w = this.roundW(topW * 0.95);
+      const w = this.roundW(topW * 0.95, ex);
       return { kind: 'reduce', title: 'Reset the weight', tag: 'reset',
         text: `You've missed ${t.repMin} reps for ${failStreak} sessions in a row. Drop to ${w} ${unit} and own the rep range first.`,
         sets: mk(w, t.repMin) };
     }
     if (allTop && (avgRpe == null || avgRpe <= 9.5)) {
-      const w = this.roundW(topW + inc);
+      const w = this.roundW(topW + inc, ex);
       let n = nSets, extra = '';
       if (weekly < 8 && nSets < 5) { n = nSets + 1; extra = ` ${MUSCLES[ex.muscle]} only got ${Math.round(weekly)} sets this week, so add one set.`; }
       return { kind: 'weight', title: `Add weight: ${w} ${unit}`, tag: '+' + inc + ' ' + unit,
@@ -211,8 +223,9 @@ const Coach = {
   },
   ladderProgress(l) {
     let current = 0;
+    const weighted = { pull_up: 'pull_up_weighted', chin_up: 'chin_up_weighted', chest_dip: 'chest_dip_weighted' };
     l.steps.forEach((st, i) => {
-      const h = Store.sessions(st.exId, 3);
+      const h = Store.sessions(st.exId, 3).concat(weighted[st.exId] ? Store.sessions(weighted[st.exId], 3) : []);
       if (!h.length) return;
       const ex = Store.ex(st.exId);
       const done = h.some(sess => sess.sets.length >= st.sets && sess.sets.slice(0, st.sets).every(s => (ex.type === 'dur' ? +s.t : +s.r) >= st.goal));
@@ -232,7 +245,8 @@ const Coach = {
       const ex = Store.ex(id);
       if (ex.type !== 'wr' && ex.type !== 'wbw') continue;
       const s = this.suggest(id, null);
-      if (s.kind === 'deload' || s.kind === 'reduce') out.push({ icon: 'alert-triangle', tone: 'warning', text: `${ex.name}: ${s.title.toLowerCase()}. ${s.text}`, exId: id });
+      if (s.kind === 'push') out.push({ icon: 'flame', tone: 'accent', text: `${ex.name}: flat for 3 sessions. Push the last set harder.`, exId: id });
+      else if (s.kind === 'deload' || s.kind === 'reduce') out.push({ icon: 'alert-triangle', tone: 'warning', text: `${ex.name}: ${s.title.toLowerCase()}. ${s.text}`, exId: id });
       else if (s.kind === 'weight') out.push({ icon: 'trending-up', tone: 'success', text: `${ex.name}: ready for ${s.title.replace('Add weight: ', '')} next session.`, exId: id });
     }
     const vol = this.weeklySets();
