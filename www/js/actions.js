@@ -69,6 +69,7 @@ const Actions = {
       if ((ex.type === 'wr') && s.w === '') return toast('Enter a weight first');
       if (['wr', 'wbw', 'bw'].includes(ex.type) && (s.r === '' || s.r == null)) return toast('Enter reps first');
       s.done = true; buzz([30]);
+      const auto = Plan.autoregulate(e, +d.j); if (auto) toast(auto, 3500);
       const nextUndone = e.sets.slice(+d.j + 1).some(x => !x.done);
       if (!e.ss && e.rest && (nextUndone || Store.data.active.exercises.indexOf(e) < Store.data.active.exercises.length - 1)) this.startRest(e.rest);
     } else s.done = false;
@@ -202,6 +203,38 @@ const Actions = {
   poseReset() { if (Pose.state) { Pose.state.reps = 0; Pose.state.phase = 'up'; Pose.state.cue = 'Start your set'; Pose.state.onUpdate(Pose.state); } },
   async poseFlip() { Pose.facing = Pose.facing === 'user' ? 'environment' : 'user'; this.refreshSheet(); },
   aiDelete() { const fs = Plugin('Filesystem'); if (fs) fs.rmdir({ path: 'ai', directory: 'DATA', recursive: true }).catch(() => { }); delete Store.data.settings.aiPack; Store.save(true); Pose.landmarker = null; toast('AI pack removed'); this.refreshSheet(); },
+
+  // ----- Planning
+  toggleGym(el, d) {
+    const g = Plan.gym().slice(), i = g.indexOf(d.id);
+    if (i >= 0) g.splice(i, 1); else g.push(d.id);
+    Store.data.settings.gym = g.length === Object.keys(EQUIPMENT).length ? [] : g; Store.save(); this.refreshSheet();
+  },
+  pickGym(el) { this.pick.gymOnly = el.checked; $('#pickList').innerHTML = this.pickList(); },
+  startBlock(el, d) { Plan.startBlock(d.id); toast(`${Plan.BLOCKS[d.id].name} block started. Week 1 of 5.`); this.stack.length ? this.refreshSheet() : this.render(); this.render(); },
+  endBlock() { Plan.endBlock(); this.stack.length ? this.refreshSheet() : this.render(); this.render(); },
+  builder() {
+    this.bopt = this.bopt || { goal: 'muscle', days: 4, minutes: 60, level: 'Intermediate' };
+    const sel = (k, opts) => `<select data-b="${k}">${opts.map(([v, l]) => `<option value="${v}" ${String(this.bopt[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    this.openSheet('builder', 'Build my program', () => {
+      const plan = Plan.build(this.bopt); this.bplan = plan;
+      return `<div class="grid2">
+          <label class="field">Goal ${sel('goal', [['muscle', 'Build muscle'], ['strength', 'Get stronger'], ['general', 'General fitness']])}</label>
+          <label class="field">Days per week ${sel('days', [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']])}</label>
+          <label class="field">Session length ${sel('minutes', [[30, '30 min'], [45, '45 min'], [60, '60 min'], [75, '75+ min']])}</label>
+          <label class="field">Experience ${sel('level', [['Beginner', 'Beginner'], ['Intermediate', 'Intermediate'], ['Advanced', 'Advanced']])}</label></div>
+        <p class="sm muted">Equipment: ${Plan.gym().map(k => EQUIPMENT[k]).join(', ')}. <button class="link sm" data-a="settings">Change</button></p>
+        <div class="card"><b>${esc(plan.name)}</b><div class="sm muted">${esc(plan.split)} split</div>
+          ${plan.routines.map(r => `<div style="margin-top:10px"><b class="sm">${esc(r.name)}</b>${r.exercises.map(e => `<div class="sm muted">${esc(Store.ex(e.exId).name)}: ${e.sets} × ${e.repMin}–${e.repMax}</div>`).join('')}</div>`).join('')}</div>
+        <button class="btn primary wide" data-a="builderAdd">${icon('plus')} Add this program</button>
+        <p class="sm muted">You can edit any routine afterwards. Tip: start a training block from Programs to add planned progression and a deload week.</p>`;
+    }, { mount: () => $$('[data-b]').forEach(el => el.addEventListener('change', () => { this.bopt[el.dataset.b] = /^\d+$/.test(el.value) ? +el.value : el.value; this.refreshSheet(); })) });
+  },
+  builderAdd() {
+    const p = this.bplan; if (!p) return;
+    p.routines.forEach(r => Store.data.routines.push({ id: uid(), name: r.name, program: p.name, u: Date.now(), exercises: r.exercises }));
+    Store.save(true); this.stack = []; this.renderSheets(); this.nav('home'); toast(`Added ${p.routines.length} routines`);
+  },
 
   // ----- Error log
   errorLog() {

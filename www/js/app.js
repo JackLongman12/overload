@@ -107,6 +107,9 @@ const UI = {
       ${d.health && d.health.steps ? `<div class="sm muted">${icon('shoe')} ${fmtNum(d.health.steps)} steps today${d.health.sleepH ? ' · ' + d.health.sleepH + ' h sleep' : ''}</div>` : ''}
       <button class="btn ${ci ? '' : 'primary'}" data-a="checkin">${icon('heart-rate-monitor')} ${ci ? 'Redo' : 'Check in'}</button></div>
     </div>
+    ${(() => { const b = Plan.block(); if (!b) return ''; return b.done
+      ? `<div class="card accent-card col"><b>${icon('trophy')} ${esc(b.name)} block complete</b><div class="sm">Start the next block to keep progressing.</div><div class="grid2"><button class="btn sm primary" data-a="startBlock" data-id="${b.type}">Start another</button><button class="btn sm" data-a="endBlock">Not now</button></div></div>`
+      : `<div class="card block-card"><div class="row-between"><b>${icon('calendar-stats')} ${esc(b.name)}: week ${b.week} of ${b.total}</b><span class="tag-next">${esc(b.label)}</span></div><div class="progress"><div style="width:${b.week / b.total * 100}%"></div></div><div class="sm muted">${esc(b.note)} Target RPE ${b.rpe}.</div></div>`; })()}
     <div class="grid2">
       <button class="btn big-btn primary" data-a="startEmpty">${icon('plus')} Empty workout</button>
       <button class="btn big-btn" data-a="programs">${icon('books')} Programs</button>
@@ -218,7 +221,7 @@ const UI = {
 
   // ---------- Workout
   newWorkout(name, routine) {
-    const ex = routine ? routine.exercises.map(re => this.makeWorkoutEx(re.exId, { sets: re.sets, repMin: re.repMin, repMax: re.repMax }, re.rest)) : [];
+    const ex = routine ? routine.exercises.map(re => this.makeWorkoutEx(re.exId, { sets: re.sets, repMin: re.repMin, repMax: re.repMax, pct: re.pct || undefined, rpe: re.rpe || undefined }, re.rest)) : [];
     Store.data.active = { id: uid(), name: name || 'Workout', routineId: routine ? routine.id : null, start: Date.now(), exercises: ex, readiness: Coach.readiness() };
     BLE.autoHR();
     Store.save(true);
@@ -277,7 +280,7 @@ const UI = {
       ${inSS ? `<div class="ss-tag sm">${icon('link')} Superset</div>` : ''}
       ${e.showNotes || e.notes ? `<textarea class="notes" data-f="enotes" data-i="${i}" placeholder="Notes: seat height, grip, cues">${esc(e.notes)}</textarea>` : ''}
       <div class="coach ${sug.kind}">
-        <div class="coach-head">${icon('sparkles')}<b>${esc(sug.title)}</b>${sug.tag ? `<span class="tag">${esc(sug.tag)}</span>` : ''}</div>
+        <div class="coach-head">${icon('sparkles')}<b>${esc(sug.title)}</b>${sug.tag ? `<span class="tag">${esc(sug.tag)}</span>` : ''}${sug.rpeTarget ? `<span class="tag">RPE ${sug.rpeTarget}</span>` : ''}</div>
         <div class="sm">${esc(sug.text)}</div>
         <div class="coach-btns">${sug.sets && sug.sets.length && sug.kind !== 'new' ? `<button class="btn sm" data-a="applySug" data-i="${i}">${icon('wand')} Apply</button>` : ''}
         ${sug.nextEx ? `<button class="btn sm" data-a="swapEx" data-i="${i}" data-id="${sug.nextEx}">${icon('arrow-up-right')} Switch to ${esc(Store.ex(sug.nextEx).name)}</button>` : ''}</div>
@@ -352,9 +355,10 @@ const UI = {
 
   // ---------- Exercise picker
   openPicker(mode, onPick) {
-    this.pick = { mode, onPick, sel: [], q: '', disc: 'all', muscle: 'all' };
+    this.pick = { mode, onPick, sel: [], q: '', disc: 'all', muscle: 'all', gymOnly: !!(Store.data.settings.gym && Store.data.settings.gym.length) };
     this.openSheet('picker', 'Add exercises', () => `
       <input class="search" type="search" placeholder="Search 180+ exercises" data-f="pickq" value="${esc(this.pick.q)}" aria-label="Search exercises">
+      ${Store.data.settings.gym && Store.data.settings.gym.length ? `<label class="field row sm"><input type="checkbox" data-a-change="pickGym" ${this.pick.gymOnly ? 'checked' : ''}> Only equipment at my gym</label>` : ''}
       <div class="chips scroll-x">${['all', ...Object.keys(DISCIPLINES)].map(k => `<button class="chip ${this.pick.disc === k ? 'on' : ''}" data-a="pickDisc" data-id="${k}">${k === 'all' ? 'All' : DISCIPLINES[k].name}</button>`).join('')}</div>
       <div class="chips scroll-x">${['all', ...Object.keys(MUSCLES)].map(k => `<button class="chip ${this.pick.muscle === k ? 'on' : ''}" data-a="pickMuscle" data-id="${k}">${k === 'all' ? 'Any muscle' : MUSCLES[k]}</button>`).join('')}</div>
       <div id="pickList">${this.pickList()}</div>
@@ -364,7 +368,7 @@ const UI = {
   pickList() {
     const p = this.pick, q = p.q.toLowerCase().trim();
     const recent = new Set(Store.workoutsSorted().slice(0, 10).flatMap(w => w.exercises.map(e => e.exId)));
-    let list = Store.allExercises().filter(e => (p.disc === 'all' || e.discipline === p.disc) && (p.muscle === 'all' || e.muscle === p.muscle || (e.secondary || []).includes(p.muscle)) && (!q || e.name.toLowerCase().includes(q) || (MUSCLES[e.muscle] || '').toLowerCase().includes(q)));
+    let list = Store.allExercises().filter(e => (!p.gymOnly || Plan.available(e)) && (p.disc === 'all' || e.discipline === p.disc) && (p.muscle === 'all' || e.muscle === p.muscle || (e.secondary || []).includes(p.muscle)) && (!q || e.name.toLowerCase().includes(q) || (MUSCLES[e.muscle] || '').toLowerCase().includes(q)));
     list.sort((a, b) => (recent.has(b.id) - recent.has(a.id)) || a.name.localeCompare(b.name));
     return list.slice(0, 120).map(e => `<button class="li pick ${p.sel.includes(e.id) ? 'sel' : ''}" data-a="pickToggle" data-id="${e.id}">
       <span class="ex-ic">${icon(DISCIPLINES[e.discipline] ? DISCIPLINES[e.discipline].icon : 'barbell')}</span>
@@ -386,7 +390,8 @@ const UI = {
           ${none ? '<div class="sm muted">The coach sets distance and grade targets from your history.</div>' : `<div class="grid3 small-inputs">
             <label>Sets<input inputmode="numeric" data-rf="sets" data-i="${i}" value="${e.sets}"></label>
             <label>${isT ? 'Min sec' : 'Min reps'}<input inputmode="numeric" data-rf="repMin" data-i="${i}" value="${e.repMin}"></label>
-            <label>${isT ? 'Max sec' : 'Max reps'}<input inputmode="numeric" data-rf="repMax" data-i="${i}" value="${e.repMax}"></label></div>`}
+            <label>${isT ? 'Max sec' : 'Max reps'}<input inputmode="numeric" data-rf="repMax" data-i="${i}" value="${e.repMax}"></label></div>
+            ${['wr', 'wbw'].includes(ex.type) ? `<div class="grid2 small-inputs"><label>% of max (optional)<input inputmode="numeric" data-rf="pct" data-i="${i}" value="${e.pct || ''}" placeholder="Coach decides"></label><label>Target RPE (optional)<input inputmode="decimal" data-rf="rpe" data-i="${i}" value="${e.rpe || ''}" placeholder="8"></label></div>` : ''}`}
           <label class="sm muted">Rest <select data-rf="rest" data-i="${i}">${[0, 30, 45, 60, 90, 120, 150, 180, 240, 300].map(v => `<option value="${v}" ${+e.rest === v ? 'selected' : ''}>${v ? fmtDur(v) : 'Off'}</option>`).join('')}</select></label>
         </div>`; }).join('') || '<div class="empty">Add exercises to this routine.</div>'}
       <button class="btn wide" data-a="rAddEx">${icon('plus')} Add exercise</button>

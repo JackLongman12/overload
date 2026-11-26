@@ -215,7 +215,11 @@ Object.assign(UI, {
     this.openSheet('programs', 'Programs', () => {
       const added = new Set(Store.data.routines.map(r => r.program).filter(Boolean));
       const list = PROGRAMS.filter(p => this.progGoal === 'all' || p.goal === this.progGoal);
-      return `<p class="sm muted">${PROGRAMS.length} ready-made plans, all free. Adding one creates its routines, and the coach handles progression.</p>
+      const b = Plan.block();
+      return `<button class="card accent-card" data-a="builder">${icon('wand')}<div><b>Build my own program</b><div class="sm">Pick your goal, days and equipment. A plan is generated from the exercise library.</div></div></button>
+      <div class="card"><b>${icon('calendar-stats')} Training blocks</b><p class="sm muted">5-week cycles: build intensity for 4 weeks, then a planned deload week. Works with any routine or program.</p>
+        ${b && !b.done ? `<div class="sm">Current: ${esc(b.name)}, week ${b.week} of ${b.total}. <button class="link sm" data-a="endBlock">End block</button></div>` : `<div class="grid2"><button class="btn sm" data-a="startBlock" data-id="hypertrophy">Muscle block</button><button class="btn sm" data-a="startBlock" data-id="strength">Strength block</button></div>`}</div>
+      <p class="sm muted">${PROGRAMS.length} ready-made plans, all free. Adding one creates its routines, and the coach handles progression.</p>
       <div class="chips scroll-x">${[['all', 'All'], ...Object.entries(PROGRAM_GOALS)].map(([k, v]) => `<button class="chip ${this.progGoal === k ? 'on' : ''}" data-a="progGoal" data-id="${k}">${v}</button>`).join('')}</div>
       ${list.map(p => `<div class="card"><div class="row-between"><div><b>${esc(p.name)}</b>
         <div class="chips" style="margin:6px 0 4px"><span class="chip ghost">${p.days} day${p.days > 1 ? 's' : ''}/week</span><span class="chip ghost">${esc(p.level)}</span><span class="chip ghost">${esc(p.equip)}</span></div>
@@ -401,6 +405,8 @@ Object.assign(UI, {
         <label class="field">Bar weight (${s.unit})<input inputmode="decimal" data-setting="bar" value="${s.bar}"></label>
         <label class="field">Body weight (${s.unit})<input inputmode="decimal" data-setting="bodyweight" value="${s.bodyweight}"></label>
       </div>
+      <div class="field">My gym has <span class="muted sm">(the coach and program builder only use this equipment)</span>
+        <div class="chips" style="margin-top:6px">${Object.entries(EQUIPMENT).map(([k, v]) => `<button class="chip ${Plan.gym().includes(k) ? 'on' : ''}" data-a="toggleGym" data-id="${k}">${v}</button>`).join('')}</div></div>
       <label class="field row"><input type="checkbox" data-setting="keepAwake" ${s.keepAwake !== false ? 'checked' : ''}> Keep the screen on during workouts and timers</label>
       <label class="field">Available plates (${s.unit}, comma separated)<input data-setting="plates" value="${s.plates.join(', ')}"></label>
       <button class="btn wide" data-a="updates">${icon('refresh')} App updates</button>

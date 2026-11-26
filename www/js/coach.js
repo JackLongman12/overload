@@ -65,6 +65,8 @@ const Coach = {
     else if (ex.type === 'bw') s = this.suggestBodyweight(ex, t, hist);
     else s = this.suggestLoaded(ex, t, hist);
 
+    if (typeof Plan !== 'undefined') s = Plan.apply(ex, t, s, hist);
+
     // Readiness autoregulation
     if (ready != null && s.sets && s.sets.length && hist.length) {
       if (ready < 45) {
@@ -212,7 +214,7 @@ const Coach = {
   },
 
   variations(ex) {
-    return Store.allExercises().filter(e => e.id !== ex.id && e.muscle === ex.muscle && e.type === ex.type && e.compound === ex.compound).slice(0, 4);
+    return Store.allExercises().filter(e => e.id !== ex.id && e.muscle === ex.muscle && e.type === ex.type && e.compound === ex.compound && (typeof Plan === 'undefined' || Plan.available(e))).slice(0, 4);
   },
 
   // ---- Skill ladders

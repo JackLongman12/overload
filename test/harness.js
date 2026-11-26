@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const FILES = ['util', 'exercises', 'store', 'sync', 'device', 'pose', 'coach', 'importers', 'updatekey', 'updater', 'app', 'actions', 'views'];
+const FILES = ['util', 'exercises', 'store', 'sync', 'device', 'pose', 'coach', 'planning', 'importers', 'updatekey', 'updater', 'app', 'actions', 'views'];
 const EXPORTS = ['Store', 'Photos', 'Sync', 'Coach', 'IO', 'BLE', 'HC', 'Pose', 'LM', 'UI', 'Actions', 'Timer', 'Updater', 'BUILTIN_EXERCISES', 'PROGRAMS', 'LADDERS',
-  'warmupSets', 'readinessScore', 'convertUnits', 'findPRs', 'routineGroups', 'workoutVolume', 'uid', 'parseDur', 'fmtDur', 'ErrorLog'];
+  'warmupSets', 'readinessScore', 'convertUnits', 'findPRs', 'routineGroups', 'workoutVolume', 'uid', 'parseDur', 'fmtDur', 'ErrorLog', 'Plan', 'EQUIPMENT'];
 
 function load() {
   const storage = new Map();
