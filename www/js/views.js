@@ -3,6 +3,10 @@
 const MEASURES = [['weight', 'Body weight', () => U()], ['bodyfat', 'Body fat', () => '%'], ['waist', 'Waist', () => 'cm'], ['chest', 'Chest', () => 'cm'], ['hips', 'Hips', () => 'cm'],
   ['arm', 'Arm', () => 'cm'], ['thigh', 'Thigh', () => 'cm'], ['calf', 'Calf', () => 'cm'], ['neck', 'Neck', () => 'cm'], ['rhr', 'Resting heart rate', () => 'bpm']];
 
+const DISCLAIMER_HTML = `<div class="card warn-card sm"><b>Health and safety</b>
+  <p>Overload gives general training suggestions based on the numbers you log. It is not medical advice and doesn't know about your injuries, health conditions or form.</p>
+  <p>Check with a doctor before starting a new training program, especially if you have a medical condition, are pregnant, or haven't exercised in a while. Stop and get help if you feel pain, dizziness or chest discomfort. Ignore any suggestion that doesn't feel right for your body.</p></div>`;
+
 const Timer = {
   phases: [], i: 0, end: 0, left: 0, paused: false, iv: null, conf: null, startedAt: 0, amrapRounds: 0, finished: false,
   build(c) {
@@ -75,6 +79,17 @@ Object.assign(UI, {
       <button class="btn primary wide" data-a="ciSave">Save${beforeWorkout ? ' and start' : ''}</button>
       ${beforeWorkout ? '<button class="btn wide ghost" data-a="ciSkip">Skip for today</button>' : ''}`,
       { onClose: () => { } });
+  },
+
+  openWelcome() {
+    this.openSheet('welcome', 'Welcome', () => `<div class="celebrate">${icon('barbell')}<h2>Welcome to Overload</h2><div class="muted sm">Every feature free. No account. No ads.</div></div>
+      <div class="card list">
+        <div class="li static col"><b>${icon('sparkles')} A coach that adapts</b><span class="sm muted">It suggests when to add reps, sets or weight, and when to back off.</span></div>
+        <div class="li static col"><b>${icon('lock')} Private by design</b><span class="sm muted">Your workouts stay on this phone. Nothing is uploaded.</span></div>
+        <div class="li static col"><b>${icon('file-import')} Bring your history</b><span class="sm muted">Import from Hevy, Strong, FitNotes, Strava or Garmin in You, Import.</span></div>
+      </div>
+      ${DISCLAIMER_HTML}
+      <button class="btn primary wide" data-a="onboardDone">I understand, let's train</button>`);
   },
 
   openPrograms() {
@@ -304,7 +319,7 @@ Object.assign(UI, {
       <button class="btn wide" data-a="exportJSON">${icon('database-export')} Full backup (.json)</button>
       <button class="btn wide" data-a="exportStrong">${icon('table-export')} Strong-format CSV (Hevy can import this)</button>
       <button class="btn wide" data-a="exportHevy">${icon('table-export')} Hevy-format CSV</button>
-      <p class="sm muted">To sync two phones, export a backup on one and import it on the other. Workouts are merged and duplicates skipped.</p>
+      <p class="sm muted">Android also backs up the app's data to your Google account automatically, if Backup is on in your phone's settings. To sync two phones, export a backup on one and import it on the other. Workouts are merged and duplicates skipped.</p>
       <div class="section-head"><h3>Danger zone</h3></div>
       <button class="btn wide danger-ghost" data-a="wipeData">${icon('trash')} Delete all data</button>`;
     });

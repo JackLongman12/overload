@@ -5,3 +5,4 @@ android/.gradle/
 dist/*.zip
 dist/
 .claude/
+keys/

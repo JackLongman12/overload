@@ -1,6 +1,7 @@
-// Builds the Android APK: node scripts/build-apk.mjs
-// Output: dist/overload-<versionName>.apk
+// Builds the signed release APK (sideloading) and AAB (Play Store): node scripts/build-apk.mjs
+// Output: dist/overload-<versionName>.apk and dist/overload-<versionName>.aab
 import fs from 'node:fs'; import path from 'node:path'; import { execSync } from 'node:child_process'; import os from 'node:os';
+if (!fs.existsSync('keys/keystore.properties')) { console.error('No release key. Run: node scripts/setup-keys.mjs'); process.exit(1); }
 const cfg = JSON.parse(fs.readFileSync('release.config.json', 'utf8'));
 const env = { ...process.env };
 if (!env.ANDROID_HOME) env.ANDROID_HOME = path.join(os.homedir(), 'AppData', 'Local', 'Android', 'Sdk');
@@ -13,8 +14,10 @@ g = g.replace(/versionCode \d+/, `versionCode ${cfg.apkVersionCode}`).replace(/v
 fs.writeFileSync(gradle, g);
 const run = (cmd, cwd = '.') => { console.log('> ' + cmd); execSync(cmd, { stdio: 'inherit', env, cwd }); };
 run('npx cap sync android');
-run(process.platform === 'win32' ? `"${path.resolve('android/gradlew.bat')}" assembleDebug` : './gradlew assembleDebug', 'android');
+const gw = process.platform === 'win32' ? `"${path.resolve('android/gradlew.bat')}"` : './gradlew';
+run(`${gw} assembleRelease bundleRelease`, 'android');
 fs.mkdirSync('dist', { recursive: true });
-const out = `dist/overload-${cfg.apkVersionName}.apk`;
-fs.copyFileSync('android/app/build/outputs/apk/debug/app-debug.apk', out);
-console.log('\nAPK ready: ' + path.resolve(out));
+const base = `dist/overload-${cfg.apkVersionName}`;
+fs.copyFileSync('android/app/build/outputs/apk/release/app-release.apk', base + '.apk');
+fs.copyFileSync('android/app/build/outputs/bundle/release/app-release.aab', base + '.aab');
+console.log('\nReady:\n  ' + path.resolve(base + '.apk') + '  (install on phones)\n  ' + path.resolve(base + '.aab') + '  (upload to Google Play)');

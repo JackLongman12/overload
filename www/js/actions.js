@@ -165,14 +165,19 @@ const Actions = {
   deleteMeasure(el, d) { Store.data.measurements = Store.data.measurements.filter(m => m.id !== d.id); Store.save(true); this.refreshSheet(); },
   async addPhoto(el) {
     const f = el.files && el.files[0]; if (!f) return;
-    try { const src = await resizeImage(f); Store.photos.push({ id: uid(), date: Date.now(), src }); if (Store.savePhotos()) { toast('Photo added'); this.render(); } else Store.photos.pop(); }
+    try { const src = await resizeImage(f, 1080); if (await Photos.add(src)) { toast('Photo added'); this.render(); } }
     catch (e) { toast('Couldn\'t read that image'); }
   },
   viewPhoto(el, d) {
     const p = Store.photos.find(x => x.id === d.id);
-    this.openSheet('photo', fmtDate(p.date), () => `<img class="photo-full" src="${p.src}" alt="Progress photo"><button class="btn wide danger-ghost" data-a="deletePhoto" data-id="${p.id}">${icon('trash')} Delete photo</button>`);
+    this.openSheet('photo', fmtDate(p.date), () => `<img class="photo-full" src="${Photos.src(p)}" alt="Progress photo"><button class="btn wide danger-ghost" data-a="deletePhoto" data-id="${p.id}">${icon('trash')} Delete photo</button>`);
   },
-  deletePhoto(el, d) { if (!confirm('Delete this photo?')) return; Store.photos = Store.photos.filter(p => p.id !== d.id); Store.savePhotos(); this.closeSheet(); },
+  async deletePhoto(el, d) { if (!confirm('Delete this photo?')) return; await Photos.remove(d.id); this.closeSheet(); },
+
+  // ----- Welcome, disclaimer, privacy
+  onboardDone() { Store.data.onboarded = true; Store.save(true); this.closeSheet(); },
+  disclaimer() { this.openSheet('disclaimer', 'Health and safety', () => DISCLAIMER_HTML); },
+  privacy() { const url = 'https://github.com/JackLongman12/overload/blob/main/PRIVACY.md'; const br = Plugin('Browser'); if (br) br.open({ url }); else window.open(url, '_blank'); },
 
   // ----- Settings, data, updates
   settings() { this.openSettings(); },
@@ -187,12 +192,12 @@ const Actions = {
   },
   importCommit() { const r = this.importResult; const n = IO.commit(r); this.importResult = null; this.refreshSheet(); toast(`Imported ${n} workout(s)`); },
   importCancel() { this.importResult = null; this.refreshSheet(); },
-  exportJSON() { download(`overload-backup-${new Date().toISOString().slice(0, 10)}.json`, Store.exportJSON(), 'application/json'); },
+  async exportJSON() { toast('Preparing backup…'); download(`overload-backup-${new Date().toISOString().slice(0, 10)}.json`, await Store.exportJSON(), 'application/json'); this.render(); },
   exportStrong() { download(`overload-strong-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toStrongCSV(), 'text/csv'); },
   exportHevy() { download(`overload-hevy-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toHevyCSV(), 'text/csv'); },
   wipeData() {
     if (!confirm('Delete ALL workouts, routines, measurements and photos from this phone? This can\'t be undone. Export a backup first.')) return;
     if (!confirm('Are you sure? Everything will be erased.')) return;
-    Store.data = Store.defaults(); Store.photos = []; Store.save(true); Store.savePhotos(); this.stack = []; this.renderSheets(); this.nav('home');
+    Store.data = Store.defaults(); [...Store.photos].forEach(p => Photos.remove(p.id)); Store.photos = []; Store.save(true); Store.savePhotos(); this.stack = []; this.renderSheets(); this.nav('home');
   }
 };

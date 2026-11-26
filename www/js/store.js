@@ -36,7 +36,12 @@ const Store = {
     const def = this.defaults();
     this.data = d ? { ...def, ...d, settings: { ...def.settings, ...(d.settings || {}) } } : def;
     if (!this.data.settings.updateUrl) this.data.settings.updateUrl = def.settings.updateUrl;
-    try { this.photos = JSON.parse(localStorage.getItem(PHOTO_KEY) || '[]'); } catch (e) { this.photos = []; }
+    let pr = null;
+    try { pr = localStorage.getItem(PHOTO_KEY); } catch (e) { }
+    if (!pr) pr = await this.readFile('photos/index.json');
+    try { this.photos = JSON.parse(pr || '[]'); } catch (e) { this.photos = []; }
+    await Photos.migrate();
+    await Photos.resolve();
   },
 
   save(now) {
@@ -49,15 +54,19 @@ const Store = {
     if (now) go(); else this._t = setTimeout(go, 300);
   },
 
+  // Photo metadata only (images are files on native). `url` is runtime-only.
   savePhotos() {
-    try { localStorage.setItem(PHOTO_KEY, JSON.stringify(this.photos)); return true; }
-    catch (e) { toast('Not enough space for more photos'); return false; }
+    const s = JSON.stringify(this.photos.map(({ url, ...p }) => p));
+    const fs = Plugin('Filesystem');
+    if (fs) fs.writeFile({ path: 'photos/index.json', data: s, directory: 'DATA', encoding: 'utf8', recursive: true }).catch(() => { });
+    try { localStorage.setItem(PHOTO_KEY, s); return true; }
+    catch (e) { if (fs) return true; toast('Not enough space for more photos'); return false; }
   },
 
-  async readFile() {
+  async readFile(path = FILE_NAME) {
     const fs = Plugin('Filesystem');
     if (!fs) return null;
-    try { const r = await fs.readFile({ path: FILE_NAME, directory: 'DATA', encoding: 'utf8' }); return r.data; }
+    try { const r = await fs.readFile({ path, directory: 'DATA', encoding: 'utf8' }); return r.data; }
     catch (e) { return null; }
   },
 
@@ -113,7 +122,64 @@ const Store = {
     return c && Date.now() - c.date < 16 * 3600e3 ? c : null;
   },
 
-  exportJSON() {
-    return JSON.stringify({ app: 'overload', exported: new Date().toISOString(), data: this.data, photos: this.photos }, null, 1);
+  async exportJSON() {
+    const photos = await Photos.asDataUrls();
+    this.data.settings.lastBackup = Date.now(); this.save(true);
+    return JSON.stringify({ app: 'overload', exported: new Date().toISOString(), data: this.data, photos }, null, 1);
+  }
+};
+
+// Progress photos: stored as JPEG files in the app's private storage on Android
+// (no size cap, included in Android auto-backup). Browser falls back to data URLs.
+const Photos = {
+  src(p) { return p.url || p.src || ''; },
+
+  async add(dataUrl, date = Date.now(), id = uid()) {
+    const fs = Plugin('Filesystem');
+    if (fs) {
+      const path = `photos/${id}.jpg`;
+      await fs.writeFile({ path, data: dataUrl.split(',')[1], directory: 'DATA', recursive: true });
+      Store.photos.push({ id, date, path });
+    } else Store.photos.push({ id, date, src: dataUrl });
+    await this.resolve();
+    return Store.savePhotos();
+  },
+
+  async remove(id) {
+    const p = Store.photos.find(x => x.id === id), fs = Plugin('Filesystem');
+    if (p && p.path && fs) { try { await fs.deleteFile({ path: p.path, directory: 'DATA' }); } catch (e) { } }
+    Store.photos = Store.photos.filter(x => x.id !== id); Store.savePhotos();
+  },
+
+  // Turn file paths into URLs the WebView can show
+  async resolve() {
+    const fs = Plugin('Filesystem'), C = Cap();
+    if (!fs || !C) return;
+    for (const p of Store.photos) {
+      if (p.path && !p.url) { try { const r = await fs.getUri({ path: p.path, directory: 'DATA' }); p.url = C.convertFileSrc(r.uri); } catch (e) { } }
+    }
+  },
+
+  // Move any photos still held as data URLs (older versions, imported backups) into files
+  async migrate() {
+    const fs = Plugin('Filesystem');
+    if (!fs) return;
+    let changed = false;
+    for (const p of Store.photos) {
+      if (!p.src || p.path) continue;
+      try { p.path = `photos/${p.id}.jpg`; await fs.writeFile({ path: p.path, data: p.src.split(',')[1], directory: 'DATA', recursive: true }); delete p.src; changed = true; }
+      catch (e) { delete p.path; }
+    }
+    if (changed) Store.savePhotos();
+  },
+
+  // For backups: embed every image
+  async asDataUrls() {
+    const fs = Plugin('Filesystem'), out = [];
+    for (const p of Store.photos) {
+      if (p.src) { out.push({ id: p.id, date: p.date, src: p.src }); continue; }
+      if (p.path && fs) { try { const r = await fs.readFile({ path: p.path, directory: 'DATA' }); out.push({ id: p.id, date: p.date, src: 'data:image/jpeg;base64,' + r.data }); } catch (e) { } }
+    }
+    return out;
   }
 };

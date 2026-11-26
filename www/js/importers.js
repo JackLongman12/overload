@@ -203,7 +203,7 @@ const IO = {
       const b = result.backup.data;
       const mergeBy = (key) => { const ids = new Set(d[key].map(x => x.id)); (b[key] || []).forEach(x => { if (!ids.has(x.id)) d[key].push(x); }); };
       ['workouts', 'routines', 'measurements', 'checkins', 'customExercises'].forEach(mergeBy);
-      if (Array.isArray(result.backup.photos)) { const ids = new Set(Store.photos.map(p => p.id)); result.backup.photos.forEach(p => { if (!ids.has(p.id)) Store.photos.push(p); }); Store.savePhotos(); }
+      if (Array.isArray(result.backup.photos)) { const ids = new Set(Store.photos.map(p => p.id)); result.backup.photos.forEach(p => { if (!ids.has(p.id) && p.src) Store.photos.push({ id: p.id, date: p.date, src: p.src }); }); Store.savePhotos(); Photos.migrate().then(() => Photos.resolve()).then(() => UI.render()); }
       Store.save(true); return (b.workouts || []).length;
     }
     const seen = new Set(d.workouts.map(w => Math.round(w.start / 60000) + '|' + w.name));

@@ -3,15 +3,22 @@
 Every feature is free. No account, no ads. Data stays on your phone.
 
 ## Install on your Android phone
-1. Copy `dist/overload-1.0.0.apk` to your phone (USB, Google Drive, email to yourself).
+1. Download the latest `overload-<version>.apk` from https://github.com/JackLongman12/overload/releases on your phone (or copy it from `dist/`).
 2. Open it on the phone. Android asks you to allow installs from that app (Files/Drive). Allow it, then tap **Install**.
 3. Open **Overload**. Allow notifications so the rest timer and interval timers alert you with the screen off.
+
+## Keys: back these up
+`keys/` holds two private keys. Git ignores them, so they exist only on this PC.
+- `overload-release.jks` and `keystore.properties` sign the APK and AAB. Without them, new APKs can't update existing installs, and you can't update a Play Store listing.
+- `update-private.pem` signs `update.json`. The app rejects any update not signed with it, so a leaked or compromised GitHub account can't push code to phones.
+
+Copy the `keys/` folder to a password manager or an encrypted USB drive. To create them on a new machine, run `node scripts/setup-keys.mjs`, but that makes new keys, which means a reinstall for everyone.
 
 ## Rebuild the APK after code changes
 ```
 node scripts/build-apk.mjs
 ```
-Output: `dist/overload-<version>.apk`. Uses JDK 21 and the Android SDK already on this PC.
+Outputs a release-signed `dist/overload-<version>.apk` (for phones) and `.aab` (for Google Play). Uses JDK 21 and the Android SDK on this PC.
 
 ## Auto-update
 There are two kinds of update:
@@ -30,7 +37,6 @@ The app reads `update.json` from this repo (https://raw.githubusercontent.com/Ja
 
 The latest APK is always at https://github.com/JackLongman12/overload/releases.
 
-Updates must be signed with the same key. Debug builds from this PC use `~/.android/debug.keystore`, so keep that file safe or later APKs won't install over the old one.
 
 ## Import and export
 **You > Import, export and sync** reads:

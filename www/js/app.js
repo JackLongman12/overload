@@ -18,7 +18,8 @@ const UI = {
       app.addListener('backButton', () => this.back());
       app.addListener('resume', () => this.tick());
     }
-    if (Store.data.active) toast('Workout in progress. Tap the banner to resume.');
+    if (!Store.data.onboarded) this.openWelcome();
+    else if (Store.data.active) toast('Workout in progress. Tap the banner to resume.');
   },
 
   back() {
@@ -84,9 +85,12 @@ const UI = {
     const recList = Object.entries(rec).filter(([m]) => !['cardio', 'mobility', 'full_body'].includes(m));
     const hr = new Date().getHours();
     const greet = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+    const lastB = d.settings.lastBackup || 0, firstW = d.workouts.length ? Math.min(...d.workouts.map(w => w.start)) : Date.now();
+    const needBackup = d.workouts.length >= 3 && Date.now() - Math.max(lastB, firstW) > 30 * 864e5;
     return `
     <div class="page-head"><div><div class="muted sm">${fmtDate(Date.now(), { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>${greet}${d.settings.name ? ', ' + esc(d.settings.name) : ''}</h1></div></div>
     ${a ? `<button class="card accent-card" data-a="openWorkout">${icon('player-play')} <div><b>Resume ${esc(a.name)}</b><div class="sm">${a.exercises.length} exercises · started ${fmtTime(a.start)}</div></div></button>` : ''}
+    ${needBackup ? `<div class="card warn-card"><div class="row-between"><div><b>${icon('database-export')} Back up your training</b><div class="sm">${lastB ? 'Last backup ' + fmtDate(lastB, { day: 'numeric', month: 'short' }) : 'You haven\'t made a backup yet'}. Save a copy to Drive or email so a lost phone doesn't mean lost progress.</div></div><button class="btn sm primary" data-a="exportJSON">Back up</button></div></div>` : ''}
     <div class="card">
       <div class="row-between"><div><div class="muted sm">Readiness today</div>
       ${ci ? `<div class="big">${ci.score}<span class="muted sm"> / 100</span></div><div class="sm muted">${readinessLabel(ci.score)}</div>` : `<div class="sm">Check in so the coach can adjust today's targets.</div>`}</div>
@@ -153,7 +157,7 @@ const UI = {
     return `
     <div class="page-head"><h1>Progress</h1></div>
     <div class="section-head"><h3>${icon('sparkles')} Coach</h3></div>
-    <div class="card">${ins.map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}</div>
+    <div class="card">${ins.map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}<div class="sm muted" style="padding-top:8px">General guidance, not medical advice. <button class="link sm" data-a="disclaimer">Health and safety</button></div></div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${ws.length}</b></div>
       <div class="stat"><div class="muted sm">Week streak</div><b>${weekStreak()}</b></div>
@@ -182,12 +186,16 @@ const UI = {
       ${lineChart(bw, { label: 'body weight' })}
       <button class="link" data-a="measureList">All measurements</button></div>
     <div class="card"><div class="row-between"><b>Progress photos</b><label class="btn sm">${icon('camera')} Add<input type="file" accept="image/*" data-a-change="addPhoto" hidden></label></div>
-      <div class="photos">${Store.photos.slice().reverse().slice(0, 9).map(p => `<button data-a="viewPhoto" data-id="${p.id}"><img src="${p.src}" alt="Progress photo, ${fmtDate(p.date)}"><span>${fmtDate(p.date, { day: 'numeric', month: 'short' })}</span></button>`).join('') || '<div class="sm muted">Photos stay on this phone.</div>'}</div></div>
+      <div class="photos">${Store.photos.slice().reverse().slice(0, 9).map(p => `<button data-a="viewPhoto" data-id="${p.id}"><img src="${Photos.src(p)}" alt="Progress photo, ${fmtDate(p.date)}"><span>${fmtDate(p.date, { day: 'numeric', month: 'short' })}</span></button>`).join('') || '<div class="sm muted">Photos stay on this phone.</div>'}</div></div>
     <div class="card list">
       <button class="li" data-a="settings">${icon('settings')}<span>Settings</span>${icon('chevron-right', 'muted')}</button>
       <button class="li" data-a="dataSheet">${icon('file-import')}<span>Import, export and sync</span>${icon('chevron-right', 'muted')}</button>
       <button class="li" data-a="updates">${icon('refresh')}<span>App updates</span><span class="muted sm">v${esc(Updater.bundleVersion)}</span></button>
       <button class="li" data-a="allExercises">${icon('list')}<span>Exercise library</span><span class="muted sm">${Store.allExercises().length}</span></button>
+    </div>
+    <div class="card list">
+      <button class="li" data-a="disclaimer">${icon('stethoscope')}<span>Health and safety</span>${icon('chevron-right', 'muted')}</button>
+      <button class="li" data-a="privacy">${icon('shield-lock')}<span>Privacy policy</span>${icon('external-link', 'muted')}</button>
     </div>
     <div class="card about sm muted">${icon('lock-open')} Every feature is free. No account, no ads, no paywall. Your data stays on your device.</div>
     <div style="height:20px"></div>`;
