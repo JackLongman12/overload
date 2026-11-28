@@ -1,12 +1,12 @@
 // Loads the app's browser scripts into a Node VM with minimal browser stubs, so the
-// coach, importers, sync, device parsers and rep counter can be unit-tested.
+// coach, importers, sync and Health Connect parsing can be unit-tested.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const FILES = ['util', 'exercises', 'climbing', 'howto', 'store', 'sync', 'device', 'pose', 'vendor/bodymap-art', 'extras', 'coach', 'planning', 'importers', 'updatekey', 'updater', 'app', 'actions', 'views', 'ask'];
-const EXPORTS = ['Store', 'Photos', 'Sync', 'Coach', 'IO', 'BLE', 'HC', 'Pose', 'LM', 'UI', 'Actions', 'Timer', 'Updater', 'BUILTIN_EXERCISES', 'PROGRAMS', 'LADDERS',
-  'warmupSets', 'readinessScore', 'convertUnits', 'findPRs', 'routineGroups', 'workoutVolume', 'uid', 'parseDur', 'fmtDur', 'ErrorLog', 'Plan', 'EQUIPMENT', 'Achievements', 'BodyMap', 'Climb', 'GRADE_SYSTEMS', 'HOWTO', 'Strength', 'BODY_ART', 'Today', 'Ask', 'workoutStat', 'liftsWeights'];
+const FILES = ['util', 'exercises', 'climbing', 'howto', 'store', 'sync', 'device', 'vendor/bodymap-art', 'extras', 'coach', 'planning', 'importers', 'updatekey', 'updater', 'app', 'actions', 'views', 'ask'];
+const EXPORTS = ['Store', 'Photos', 'Sync', 'Coach', 'IO', 'HC', 'UI', 'Actions', 'Timer', 'Updater', 'BUILTIN_EXERCISES', 'PROGRAMS', 'LADDERS',
+  'warmupSets', 'readinessScore', 'convertUnits', 'findPRs', 'routineGroups', 'workoutVolume', 'uid', 'parseDur', 'fmtDur', 'ErrorLog', 'Plan', 'EQUIPMENT', 'Achievements', 'BodyMap', 'Climb', 'HOWTO', 'Strength', 'BODY_ART', 'Today', 'Ask', 'workoutStat', 'liftsWeights', 'setColumns', 'prevText', 'TIMER_GROUPS', 'TIMER_PRESETS'];
 
 function load() {
   const storage = new Map();

@@ -211,95 +211,10 @@ const HC = {
   }
 };
 
-// ---------- Bluetooth: Xiaomi scales (passive broadcast) and standard heart-rate straps/watches
-const BLE = {
-  inited: false, hr: null, hrDevice: null, scanning: false,
-  get api() { return window.capacitorCommunityBluetoothLe ? window.capacitorCommunityBluetoothLe.BleClient : null; },
-  uuid: n => '0000' + n.toString(16).padStart(4, '0') + '-0000-1000-8000-00805f9b34fb',
-  async init() {
-    if (!this.api) throw new Error("Bluetooth isn't available here.");
-    if (!this.inited) { await this.api.initialize({ androidNeverForLocation: true }); this.inited = true; }
-    try { if (Cap() && !(await this.api.isEnabled())) await this.api.requestEnable(); } catch (e) { }
-  },
-
-  // Xiaomi Mi Body Composition Scale 2 (and similar): 13-byte service data on 0x181B
-  parseMi2(b) {
-    if (b.length < 13) return null;
-    const lbs = b[0] & 1, catty = (b[1] >> 6) & 1, stable = (b[1] >> 5) & 1, removed = (b[1] >> 7) & 1, hasImp = (b[1] >> 1) & 1;
-    const w = ((b[12] << 8) | b[11]) / (lbs || catty ? 100 : 200);
-    const kg = lbs ? w * 0.45359237 : catty ? w / 2 : w;
-    const imp = (b[10] << 8) | b[9];
-    return { kg: Math.round(kg * 100) / 100, stable: !!stable && !removed, impedance: hasImp && imp > 0 && imp < 3000 ? imp : null, model: 'Mi Body Composition Scale' };
-  },
-  // Xiaomi Mi Smart Scale 1 and the standard Weight Scale service: data on 0x181D
-  parseMi1(b) {
-    if (b.length < 3) return null;
-    const lbs = b[0] & 1, catty = (b[0] >> 4) & 1, stable = (b[0] >> 5) & 1, removed = (b[0] >> 7) & 1;
-    const w = ((b[2] << 8) | b[1]) / (lbs || catty ? 100 : 200);
-    const kg = lbs ? w * 0.45359237 : catty ? w / 2 : w;
-    return { kg: Math.round(kg * 100) / 100, stable: !!stable && !removed, impedance: null, model: 'Mi Smart Scale' };
-  },
-  async scanScale(onUpdate, ms = 60000) {
-    await this.init();
-    if (this.scanning) await this.stopScan();
-    this.scanning = true;
-    const k2 = this.uuid(0x181b), k1 = this.uuid(0x181d);
-    await this.api.requestLEScan({ allowDuplicates: true }, r => {
-      for (const [key, dv] of Object.entries(r.serviceData || {})) {
-        const k = key.toLowerCase(), bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
-        const reading = k === k2 ? this.parseMi2(bytes) : k === k1 ? this.parseMi1(bytes) : null;
-        if (reading && reading.kg > 2) onUpdate(reading);
-      }
-    });
-    this._scanT = setTimeout(() => this.stopScan().then(() => onUpdate(null)), ms);
-  },
-  async stopScan() { clearTimeout(this._scanT); if (this.scanning) { this.scanning = false; try { await this.api.stopLEScan(); } catch (e) { } } },
-
-  // Standard Bluetooth heart-rate profile (0x180D / 0x2A37): chest straps (Polar, Garmin, Wahoo, Coros)
-  // and watches with "broadcast heart rate" (Garmin, Amazfit, Huawei, Honor and others)
-  async connectHR(deviceId) {
-    await this.init();
-    const svc = this.uuid(0x180d), chr = this.uuid(0x2a37);
-    const dev = deviceId ? { deviceId, name: Store.data.settings.hrName } : await this.api.requestDevice({ services: [svc] });
-    await this.api.connect(dev.deviceId, () => { this.hr = null; this.hrDevice = null; UI.onDeviceState(); });
-    await this.api.startNotifications(dev.deviceId, svc, chr, dv => {
-      const flags = dv.getUint8(0);
-      this.hr = flags & 1 ? dv.getUint16(1, true) : dv.getUint8(1);
-      const a = Store.data.active;
-      if (a && this.hr > 30) { a.hr = a.hr || []; const last = a.hr[a.hr.length - 1]; if (!last || Date.now() - last[0] > 4000) a.hr.push([Date.now(), this.hr]); }
-      $$('.hrLive').forEach(el => el.textContent = this.hr);
-    });
-    this.hrDevice = dev;
-    Store.data.settings.hrDeviceId = dev.deviceId; Store.data.settings.hrName = dev.name || 'Heart-rate monitor'; Store.save();
-    UI.onDeviceState();
-  },
-  async disconnectHR(forget) {
-    if (this.hrDevice) { try { await this.api.disconnect(this.hrDevice.deviceId); } catch (e) { } }
-    this.hr = null; this.hrDevice = null;
-    if (forget) { delete Store.data.settings.hrDeviceId; Store.save(); }
-    UI.onDeviceState();
-  },
-  // Reconnect the remembered strap when a workout starts
-  async autoHR() { const id = Store.data.settings.hrDeviceId; if (id && !this.hrDevice && Cap()) { try { await this.connectHR(id); } catch (e) { } } }
-};
-
-// ---------- Home-screen widget and Wear OS companion (native code in android/)
+// ---------- Home-screen widget (native code in android/)
 const Companion = {
   _t: null, _last: '',
   schedule() { clearTimeout(this._t); this._t = setTimeout(() => this.push(), 700); },
-  // The set the user should do next: first unfinished working set
-  current(a) {
-    for (const e of a.exercises) {
-      const ex = Store.ex(e.exId), work = e.sets.filter(s => s.type !== 'W');
-      const i = e.sets.findIndex(s => !s.done);
-      if (i < 0) continue;
-      const s = e.sets[i], p = s.p || {}, n = s.type === 'W' ? 'Warm-up' : `Set ${work.indexOf(s) + 1} of ${work.length}`;
-      const val = k => (s[k] !== '' && s[k] != null ? s[k] : p[k]);
-      const target = ex.type === 'dist' ? `${val('d') || '?'} km` : ex.type === 'dur' ? `${val('t') || '?'} s` : ex.type === 'climb' ? `${val('g') || 'Any grade'}` : ex.type === 'wdur' ? `${fmtW(val('w')) || 0} ${U()} · ${val('t') || '?'} s` : ex.type === 'bw' ? `${val('r') || '?'} reps` : `${fmtW(val('w')) || '?'} ${U()} × ${val('r') || '?'}`;
-      return { ei: a.exercises.indexOf(e), si: i, name: ex.name, set: n, target };
-    }
-    return null;
-  },
   push() {
     const d = Store.data, a = d.active;
     const groups = d.routines.length ? routineGroups(d) : [];
@@ -311,28 +226,6 @@ const Companion = {
       const json = JSON.stringify({ active: !!a, next: a ? a.name : (next ? next.name : 'Start an empty workout'), week: d.workouts.filter(x => x.start > startOfWeek()).length, goal: d.settings.weekGoal, streak: weekStreak(), readiness: ci ? String(ci.score) : '' });
       if (json !== this._lastW) { this._lastW = json; w.update({ json }).catch(() => { }); }
     }
-    // Watch
-    const wb = Plugin('WearBridge');
-    if (wb) {
-      const cur = a ? this.current(a) : null;
-      const sug = cur ? Coach.suggest(a.exercises[cur.ei].exId, a.exercises[cur.ei].target) : null;
-      const state = a ? { active: true, name: a.name, ex: cur ? { name: cur.name, set: cur.set, target: cur.target } : null, restEnd: UI.restEnd || 0, hr: BLE.hr || 0, coach: sug ? sug.title : '' } : { active: false, next: next ? next.name : '' };
-      const json = JSON.stringify(state);
-      if (json !== this._last) { this._last = json; wb.sendState({ json }).catch(() => { }); }
-    }
   },
-  init() {
-    const wb = Plugin('WearBridge');
-    if (wb) wb.addListener('wearAction', ev => {
-      const a = Store.data.active; if (!a) return;
-      if (ev.action === 'complete') {
-        const cur = this.current(a); if (!cur) return;
-        Actions.toggleSet.call(UI, null, { i: cur.ei, j: cur.si });
-      } else if (ev.action === 'add30') Actions.restAdj.call(UI, null, { v: 30 });
-      else if (ev.action === 'skip') UI.stopRest();
-      UI.render(); this.push();
-    });
-    this.push();
-  },
-  async watchStatus() { const wb = Plugin('WearBridge'); if (!wb) return null; try { return await wb.connected(); } catch (e) { return null; } }
+  init() { this.push(); }
 };

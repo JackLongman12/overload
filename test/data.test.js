@@ -71,31 +71,3 @@ test('sync merge: union, newer wins, deletions propagate', async () => {
   assert.equal(JSON.stringify(d.routines.map(r => r.name).sort()), JSON.stringify(['Local only', 'New', 'Remote only']));
   assert.equal(d.workouts.length, 0);
 });
-
-test('Xiaomi scale broadcasts decode', async () => {
-  const app = await fresh();
-  const mi2 = app.BLE.parseMi2(new Uint8Array([0x02, 0x26, 0xe5, 0x07, 0x0b, 0x1a, 0x0a, 0, 0, 0xf4, 0x01, 0xe2, 0x36]));
-  assert.equal(mi2.kg, 70.25); assert.equal(mi2.stable, true); assert.equal(mi2.impedance, 500);
-  assert.equal(app.BLE.parseMi1(new Uint8Array([0x22, 0x80, 0x3e])).kg, 80);
-  assert.equal(app.BLE.parseMi1(new Uint8Array([0x02, 0x80, 0x3e])).stable, false);
-});
-
-test('rep counter counts squats and flags shallow reps', async () => {
-  const app = await fresh();
-  const { LM, Pose } = app;
-  const frame = knee => {
-    const p = Array.from({ length: 33 }, () => ({ x: .5, y: .5, z: 0, visibility: .99 }));
-    const rad = (180 - knee) * Math.PI / 180, H = { x: .5 - .3 * Math.sin(rad), y: .6 - .3 * Math.cos(rad) };
-    [[LM.lh, H], [LM.rh, H], [LM.lk, { x: .5, y: .6 }], [LM.rk, { x: .5, y: .6 }], [LM.la, { x: .5, y: .9 }], [LM.ra, { x: .5, y: .9 }]].forEach(([i, v]) => Object.assign(p[i], v));
-    return p;
-  };
-  const cues = [];
-  Pose.state = { mode: Pose.modeFor(app.Store.ex('squat_barbell')), reps: 0, phase: 'up', smooth: null, minAngle: 180, cue: '', depthOk: false, lastRepAt: 0, onUpdate: s => cues.push(s.cue) };
-  for (const k of [170, 140, 110, 85, 80, 85, 130, 170, 172]) Pose.step(frame(k));
-  assert.equal(Pose.state.reps, 1);
-  assert.match(cues.at(-1), /good depth/);
-  Pose.state.lastRepAt = 0;
-  for (const k of [170, 140, 110, 99, 98, 99, 130, 170, 172]) Pose.step(frame(k));
-  assert.equal(Pose.state.reps, 2);
-  assert.match(cues.at(-1), /deeper/);
-});

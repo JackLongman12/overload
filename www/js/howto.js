@@ -190,17 +190,17 @@ const HOWTO = {
   high_step_mobility: ['Hips', 'Stand side-on to a box at hip height, lift your foot onto it and rock your weight over it, then step down. Reps per side.', 'Keep your torso upright.'],
 
   // ---------- Climbing
-  bouldering: ['Climbs', 'Climb short problems without a rope. Log each problem: its grade, how many tries, and the result (Project, Flash, Sent, Repeat). Optionally the wall angle.', 'Warm up on easy grades. Rest 3–5 minutes between hard attempts.'],
-  top_rope_climbing: ['Climbs', 'Climb routes with the rope above you. Log each route\'s grade, tries and result.', 'Check knots and the belayer every time.'],
-  lead_climbing: ['Climbs', 'Clip the rope into bolts as you climb. Log each route\'s grade, tries and result (Onsight, Flash, Redpoint).', 'Onsight = first try with no info. Flash = first try with beta.'],
-  outdoor_bouldering: ['Climbs', 'Boulder outside on rock. Log each problem with grade, tries and result.', 'Use pads and a spotter.'],
-  board_climbing: ['Climbs', 'Climb on a training board (Moonboard, Kilter, Tension). Log each problem\'s grade and result.', 'Board grades are often harsh; track them separately.'],
-  spray_wall: ['Climbs', 'Climb set or made-up problems on a spray wall. Log grade and result.', 'Great for limit moves and body tension.'],
-  sport_climbing_outdoor: ['Climbs', 'Bolted routes outside. Log each route\'s grade, tries and result.', 'Redpoint = sent after working it.'],
-  trad_climbing: ['Climbs', 'Routes where you place your own gear. Log grade, tries and result.', 'Log the route name in the notes.'],
-  multi_pitch_climbing: ['Climbs', 'Long routes in several rope lengths. Log the hardest pitch grade, or each pitch.', 'Add the route name in notes.'],
-  auto_belay_laps: ['Climbs', 'Lap easy routes on auto-belays for endurance. Log each lap\'s grade.', 'Keep moving; aim for a steady pump, not a fail.'],
-  deep_water_solo: ['Climbs', 'Climb above deep water without a rope. Log grade and result.', 'Check water depth first.'],
+  bouldering: ['Climbs', 'Climb short problems without a rope. Log how long the session lasted.', 'Warm up on easy problems. Rest 3–5 minutes between hard attempts.'],
+  top_rope_climbing: ['Climbs', 'Climb routes with the rope above you. Log how long the session lasted.', 'Check knots and the belayer every time.'],
+  lead_climbing: ['Climbs', 'Clip the rope into bolts as you climb. Log how long the session lasted.', 'Check knots and the belayer every time.'],
+  outdoor_bouldering: ['Climbs', 'Boulder outside on rock. Log how long the session lasted.', 'Use pads and a spotter.'],
+  board_climbing: ['Climbs', 'Climb on a training board (Moonboard, Kilter, Tension). Log how long the session lasted.', 'Short, hard sessions work best. Rest fully between attempts.'],
+  spray_wall: ['Climbs', 'Climb set or made-up problems on a spray wall. Log how long the session lasted.', 'Great for limit moves and body tension.'],
+  sport_climbing_outdoor: ['Climbs', 'Bolted routes outside. Log how long the session lasted.', 'Check knots and the belayer every time.'],
+  trad_climbing: ['Climbs', 'Routes where you place your own gear. Log how long the session lasted.', 'Log the route name in the notes.'],
+  multi_pitch_climbing: ['Climbs', 'Long routes in several rope lengths. Log how long the climb took.', 'Add the route name in notes.'],
+  auto_belay_laps: ['Climbs', 'Lap easy routes on auto-belays for endurance. Log how long you kept going.', 'Keep moving; aim for a steady pump, not a fail.'],
+  deep_water_solo: ['Climbs', 'Climb above deep water without a rope. Log how long the session lasted.', 'Check water depth first.'],
   speed_climbing: ['Climbs', 'Climb the speed route as fast as possible. Log your time in seconds.', 'Track your best time.'],
   hangboard_hang: ['Fingers', 'Hang from an edge with straight arms and engaged shoulders for the set seconds, then rest 2 minutes. Log the edge depth (mm), grip, any added weight and seconds.', 'Most climbers should climb for a year before hangboarding. Stop if fingers hurt.'],
   max_hang_added_weight: ['Fingers', 'Hang a 20 mm edge in a half crimp for 7–10 s with added weight on a belt (or a pulley taking weight off: log it as a negative number). Pick a load you could hold about 3 s longer. 5 sets, 3 minutes rest. Log edge, grip, weight and seconds.', 'When every set holds 10 s, the coach adds weight or moves you to a smaller edge. Your strongest hang shows as % of body weight.'],
@@ -213,7 +213,7 @@ const HOWTO = {
   pinch_block_lift: ['Fingers', 'Pinch a wooden block and lift a weight for the set seconds. Log weight and seconds.', 'Trains thumb and pinch strength.'],
   campus_board: ['Power', 'Climb up the campus rungs using only your arms, feet off. Log moves or ladders as reps.', 'Only for experienced climbers. Warm up fully.'],
   campus_ladder: ['Power', 'Move hand over hand up the campus rungs (1-2-3...). One ladder = one rep.', 'Stop when moves get sloppy.'],
-  '4x4_bouldering': ['Endurance', 'Pick 4 problems a few grades below your max. Climb all 4 back to back = one set. Rest 4 minutes, do 4 sets. Log the set time.', 'You should be pumped but still sending by the last set.'],
+  '4x4_bouldering': ['Endurance', 'Pick 4 problems well below your limit. Climb all 4 back to back = one set. Rest 4 minutes, do 4 sets. Log the set time.', 'You should be pumped but still sending by the last set.'],
   arc_traversing: ['Endurance', 'Climb easy terrain continuously for 10–20 minutes with a light pump. Log the time.', 'Never get fully pumped; shake out and keep moving.'],
   lock_off_hold: ['Pull', 'Pull up and hold at the top, at 90° or at 120° elbow angle. Log seconds.', 'Key for reaching static moves.'],
   offset_pull_up: ['Pull', 'One hand on the bar, the other lower on a towel or ring. Pull up, mostly on the high arm.', 'Switch sides; counts per side.'],
@@ -240,7 +240,7 @@ function trackingText(ex) {
   return {
     wr: 'Log weight and reps for each set.', wbw: 'Log added weight (0 for body weight) and reps.', bw: 'Log reps for each set.',
     dur: 'Log seconds for each set (hold or round).', hang: 'Log edge depth (mm), grip, added weight and seconds for each hang.', wdur: 'Log the weight and how many seconds you held.', dist: 'Log distance and time.',
-    climb: 'Log one row per climb: grade, tries, result and wall angle.'
+    climb: 'Log how long the session lasted (h:mm:ss).'
   }[ex.type] || '';
 }
 
@@ -255,7 +255,7 @@ function howTo(ex) {
 function targetText(ex, t) {
   if (!t) return '';
   const range = (a, b) => (a && b && a !== b ? `${a}–${b}` : `${a || b || ''}`);
-  if (ex.type === 'climb') return t.sets > 1 ? `${t.sets} climbs` : 'One row per climb';
+  if (ex.type === 'climb') return 'Session time';
   if (ex.type === 'dist') return 'Distance and time';
   if (ex.type === 'dur' || ex.type === 'wdur' || ex.type === 'hang') return `${t.sets} × ${range(t.repMin, t.repMax)} s`;
   return `${t.sets} sets × ${range(t.repMin, t.repMax)} reps`;

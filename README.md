@@ -2,6 +2,12 @@
 
 Every feature is free. No account, no ads. Data stays on your phone.
 
+## How the app is laid out (2.3.0)
+- **Home:** the Today card (what to train, readiness, training block), Empty workout and Plans, your routines, this week.
+- **Train:** Plans (ready-made programs, build your own, training blocks, the climbing plan), exercises for Strength, Calisthenics (with skill ladders), Cardio and Climbing, three timers (Intervals, Rounds, Hangboard) and one Calculators page. Plate loading sits on each barbell exercise during a workout.
+- **Progress:** top coach notes (the full list and questions are on the Coach page), stats, climbing strength, weekly chart, body map, best lifts, history, a PDF report and achievements.
+- **You:** body weight, photos, Health Connect, Backup and sync, Settings (app updates at the bottom), exercise library.
+
 ## Install on your Android phone
 1. Download the latest `gym-app-<version>.apk` from https://github.com/JackLongman12/overload/releases on your phone (or copy it from `dist/`).
 2. Open it on the phone. Android asks you to allow installs from that app (Files/Drive). Allow it, then tap **Install**.
@@ -53,35 +59,15 @@ cd server
 npx wrangler deploy
 ```
 
-## Watches, scales and sensors
-- **Health Connect** (Samsung, Pixel/Fitbit, Xiaomi, Amazfit, Garmin, some Honor): sleep, resting HR and HRV feed the readiness score. Weight and body fat sync into measurements. Watch cardio sessions are imported, and workout heart rate is added. Code is in `www/js/device.js` (`HC`).
-- **Xiaomi Bluetooth scales** (Mi Smart Scale and Mi Body Composition Scale 1 and 2): weight is read passively from the scale's broadcast (`BLE.parseMi1` and `BLE.parseMi2`).
-- **Heart-rate straps and watches** that broadcast heart rate (standard BLE 0x180D): live bpm during workouts, and average and max are saved.
+## Health Connect
+- Samsung, Pixel/Fitbit, Xiaomi, Amazfit, Garmin and some Honor watches: sleep, resting HR and HRV feed the readiness score. Weight and body fat (including from smart scales that sync to Health Connect) go into measurements. Watch cardio sessions are imported, and workout heart rate is added. Code is in `www/js/device.js` (`HC`).
 - Apple Watch isn't supported because it only pairs with iPhone.
-
-## Wear OS watch app
-`gym-app-<version>-wear.apk` (on the Releases page) runs on Wear OS 3+ watches, such as Galaxy Watch 4 or newer and Pixel Watch. It shows the current exercise, set and target, counts down rest, and lets you complete sets, add 30 s or skip rest from your wrist. It talks to the phone app through the Wearable Data Layer, so the watch must be paired with the phone and both apps must come from this repo (same signing key).
-
-To sideload it:
-1. On the watch, open Settings > About watch > Software, and tap **Software version** 7 times to enable developer options.
-2. Go to Settings > Developer options. Turn on **ADB debugging** and **Wireless debugging**, and note the IP address and port.
-3. On a computer with Android platform-tools, run:
-   ```
-   adb connect <ip>:<port>
-   adb install gym-app-<version>-wear.apk
-   ```
-   Galaxy Watch may ask you to pair with a code first: run `adb pair <ip>:<pair-port>`.
-
-Code is in `android/wear/` (watch) and `WearBridgePlugin.java` (phone side).
 
 ## Home-screen widget
 Long-press the home screen, tap Widgets, then add Gym App. It shows your next workout, this week's progress, streak and readiness. Code is in `GymWidget.java`.
 
-## AI rep counter (on-device)
-MediaPipe Pose Landmarker runs on the phone (`www/js/pose.js`). It counts reps from joint angles and gives form cues for squat depth and push-up hip line. The roughly 20 MB AI pack is downloaded on first use and SHA-256-checked against hashes in the signed app. It isn't in the update bundle, so over-the-air updates stay small.
-
 ## Import and export
-**You > Import, export and sync** reads:
+**You > Backup and sync** holds encrypted sync, the backup file and import. It reads:
 - Hevy CSV
 - Strong CSV
 - FitNotes CSV
@@ -89,7 +75,7 @@ MediaPipe Pose Landmarker runs on the phone (`www/js/pose.js`). It counts reps f
 - GPX and TCX files (Strava, Garmin and others)
 - Gym App `.json` backups
 
-It exports a JSON backup, Strong-format CSV (which Hevy can import) and Hevy-format CSV.
+It exports a JSON backup and a Strong-format CSV (Hevy and Strong can both import it).
 
 ## Test in a browser
 ```
@@ -98,14 +84,14 @@ node scripts/serve.mjs
 Then open http://localhost:5173.
 
 ## Ask the coach and Gemini Nano
-The chat answers six common questions (today, progress, stuck, recovery, climbing, this week) from the app's own coach, offline, on every phone. On phones with Gemini Nano in Android AICore (Galaxy S25/S26, Pixel 9 and newer, and others), it also takes free-form questions: the app sends Nano a prompt with facts from your log and the built-in coach's answer, and Nano writes the reply on the device. Nothing leaves the phone. The Prompt API is in beta, and Android only allows it while the app is on screen.
+The chat answers six common questions (today, progress, stuck, recovery, fingers, this week) from the app's own coach, offline, on every phone. On phones with Gemini Nano in Android AICore (Galaxy S25/S26, Pixel 9 and newer, and others), it also takes free-form questions: the app sends Nano a prompt with facts from your log and the built-in coach's answer, and Nano writes the reply on the device. Nothing leaves the phone. The Prompt API is in beta, and Android only allows it while the app is on screen.
 
 ## Code map
 | File | What it does |
 |---|---|
-| `www/js/exercises.js` | Exercise library (180+), skill ladders, climbing grades, programs |
+| `www/js/exercises.js` | Exercise library (180+), skill ladders, programs |
 | `www/js/coach.js` | Personal trainer: double progression, stall detection, deloads, readiness, volume balance, recovery; strength calculators |
-| `www/js/climbing.js` | Grades, hangboard protocols, climbing coach, workload, profile, 16-week climbing plans |
+| `www/js/climbing.js` | Hangboard protocols and progression, finger strength as % of body weight, finger rest days, 16-week climbing plans. Climbing sessions are logged as time (no grades) |
 | `www/js/howto.js` | Directions for every exercise |
 | `www/vendor/bodymap-art.js` | Muscle map artwork from [react-native-body-highlighter](https://github.com/HichamELBSI/react-native-body-highlighter) (MIT) |
 | `www/js/store.js` | Local data and native file mirror |

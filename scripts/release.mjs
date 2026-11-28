@@ -24,8 +24,7 @@ else sh(`gh release create ${tag} dist/${zipName} --repo ${cfg.repo} --title "Co
 const apkName = `gym-app-${cfg.apkVersionName}.apk`, apkTag = `apk-${cfg.apkVersionName}`;
 if (withApk) {
   if (!fs.existsSync('dist/' + apkName)) throw new Error('Build the APK first: node scripts/build-apk.mjs');
-  const wearName = `gym-app-${cfg.apkVersionName}-wear.apk`;
-  const files = [`dist/${apkName}`].concat(fs.existsSync('dist/' + wearName) ? [`dist/${wearName}`] : []).join(' ');
+  const files = `dist/${apkName}`;
   if (exists(apkTag)) sh(`gh release upload ${apkTag} ${files} --clobber --repo ${cfg.repo}`);
   else sh(`gh release create ${apkTag} ${files} --repo ${cfg.repo} --title "Gym App ${cfg.apkVersionName}" --notes "Install this APK on Android. ${cfg.notes.replace(/"/g, "'")}" --latest`);
 }

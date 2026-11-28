@@ -8,25 +8,21 @@ const DAY = 864e5;
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 const exIsFinger = ex => ex.type === 'climb' || ex.type === 'hang' || Climb.FINGER.includes(ex.id);
 
-// Headline number for a finished workout, picked by what was trained (no more "0 kg" on a climbing day)
+// Headline number for a finished workout, picked by what was trained (no "0 kg" on a climbing day)
 function workoutStat(w) {
   const vol = workoutVolume(w);
   if (vol > 0) return { icon: 'weight', text: `${fmtNum(vol)} ${U()}` };
-  let climbs = 0, sends = 0, best = null, cat = 'boulder', km = 0, sets = 0;
+  let climbSecs = 0, climbed = false, km = 0, sets = 0;
   for (const e of w.exercises) {
     const ex = Store.ex(e.exId);
     for (const s of e.sets) {
       if (s.done === false) continue;
       sets++;
-      if (ex.type === 'climb') {
-        climbs++;
-        const c = Climb.cat(ex), v = Climb.value(s.g, c);
-        if (s.sent) { sends++; if (v != null && (best == null || v > best)) { best = v; cat = c; } }
-      }
+      if (ex.type === 'climb') { climbed = true; climbSecs += +s.t || 0; }
       if (ex.type === 'dist') km += +s.d || 0;
     }
   }
-  if (climbs) return { icon: 'mountain', text: `${climbs} climb${climbs > 1 ? 's' : ''}${best != null ? ' · top ' + Climb.label(best, cat) : sends ? '' : ' · no sends'}` };
+  if (climbed) { const mins = Math.round((climbSecs || ((w.end || w.start) - w.start) / 1000) / 60); return { icon: 'mountain', text: `${mins} min climbing` }; }
   if (km) return { icon: 'route', text: `${Math.round(km * 10) / 10} km` };
   return { icon: 'list-check', text: `${sets} set${sets === 1 ? '' : 's'}` };
 }
@@ -55,7 +51,7 @@ const Today = {
     const doneToday = d.workouts.filter(w => sameDay(w.start, now));
     const nx = this.nextRoutine();
     const rec = Coach.recovery(now, true);
-    const fd = Climb.fingerDays(now), lr = Climb.loadRatio(now);
+    const fd = Climb.fingerDays(now);
     const thisWeek = d.workouts.filter(w => w.start > startOfWeek()).length, goal = d.settings.weekGoal || 3;
     const base = { routine: nx ? nx.r : null, score, thisWeek, goal };
     if (doneToday.length) return { ...base, kind: 'done', title: 'You trained today', text: `${doneToday.map(w => w.name).join(' and ')} is logged. Recovery starts now: protein with your next meal and 7–9 hours of sleep.` };
@@ -66,7 +62,6 @@ const Today = {
     const alt = () => d.routines.find(x => x.id !== r.id && this.musclesOf(x).every(ready) && !(fingers && fd >= 2 && x.exercises.some(e => exIsFinger(Store.ex(e.exId)))));
     if (score != null && score < 45) return { ...base, kind: 'rest', title: 'Take it easy today', text: `Readiness is ${score}/100. A walk, mobility or an easy session will do more for you than a hard one. ${r.name} can wait for tomorrow.` };
     if (fingers && fd >= 3) return { ...base, kind: 'rest', title: 'Rest your fingers', text: `${fd} days in a row on your fingers. Pulleys recover slower than muscles, so take today off climbing.${alt() ? ` If you want to train, do ${alt().name}.` : ''}`, alt: alt() };
-    if (fingers && lr && lr.ratio > 1.5) return { ...base, kind: 'easy', title: `${r.name}, but easy`, text: `This week's climbing load is ${lr.ratio}× your usual. Big jumps are when finger injuries happen, so keep today to moderate climbs and skip limit attempts.` };
     if (mus.length && sore.length >= Math.ceil(mus.length / 2)) {
       const a = alt(), names = sore.map(m => MUSCLES[m].toLowerCase()).join(', ');
       return { ...base, kind: 'easy', title: a ? `Do ${a.name} instead` : `${r.name}, lighter`, text: a ? `Your ${names} are still recovering, so swap in ${a.name} today. ${r.name} stays next in line.` : `Your ${names} are still recovering. Do ${r.name} with one fewer set per exercise.`, alt: a };
@@ -82,7 +77,7 @@ const Ask = {
     ['progress', 'Am I making progress?', 'trending-up'],
     ['stuck', 'Where am I stuck?', 'alert-triangle'],
     ['recovery', 'What needs rest?', 'bed'],
-    ['climb', 'How do I climb harder?', 'mountain'],
+    ['fingers', 'How strong are my fingers?', 'hand-grab'],
     ['week', 'How is my week going?', 'calendar-stats']
   ],
   nano: 'unknown', // unknown | unavailable | downloadable | downloading | available
@@ -102,7 +97,7 @@ const Ask = {
   // Map a free-text question to a topic
   match(q) {
     const s = (q || '').toLowerCase();
-    const rules = [['climb', /climb|boulder|grade|v\d|route|project|finger|hang|crimp|send/], ['recovery', /rest|sore|recover|tired|fatigue|sleep|hurt/], ['stuck', /stuck|plateau|stall|not (improv|progress)|weak/],
+    const rules = [['fingers', /climb|boulder|finger|hang|crimp|edge|grip|pulley/], ['recovery', /rest|sore|recover|tired|fatigue|sleep|hurt/], ['stuck', /stuck|plateau|stall|not (improv|progress)|weak/],
       ['progress', /progress|improv|better|stronger|gain|pr\b|record/], ['week', /week|volume|how much|enough|often/], ['today', /today|now|should i|what.*(do|train)|workout/]];
     const hit = rules.find(([, re]) => re.test(s));
     return hit ? hit[0] : null;
@@ -119,8 +114,8 @@ const Ask = {
     const rec = Coach.recovery(Date.now(), true), sore = Object.entries(rec.pct).filter(([m, p]) => p < 80 && MUSCLES[m]).map(([m, p]) => `${MUSCLES[m]} ${p}%`);
     out.push(sore.length ? `Still recovering: ${sore.join(', ')}.` : 'All muscles recovered.');
     const lifts = topLifts().slice(0, 5); if (lifts.length) out.push(`Best lifts (estimated 1RM): ${lifts.map(l => `${Store.ex(l.exId).name} ${Math.round(l.e1)} ${U()}`).join(', ')}.`);
-    ['boulder', 'route'].forEach(cat => { const st = Climb.stats(cat, 90); if (st && st.max != null) out.push(`${cat === 'boulder' ? 'Bouldering' : 'Routes'} (90 days): hardest send ${Climb.label(st.max, cat)}, flash ${Climb.label(st.flash, cat)}, top-5 average ${Climb.label(st.top5, cat)}, send rate ${Math.round(st.sendRate * 100)}%, ${st.sessions} sessions.`); });
-    const lr = Climb.loadRatio(); if (lr) out.push(`Climbing load this week: ${lr.ratio}× the 4-week average.`);
+    const f = Climb.fingers(); if (f && f.hang) out.push(`Strongest hang: ${f.hang.pct}% of body weight (${f.hang.name}).`);
+    const cs = Climb.climbSessions(); if (cs) out.push(`Climbing sessions logged: ${cs}.`);
     const fd = Climb.fingerDays(); if (fd) out.push(`Days in a row on fingers: ${fd}.`);
     const ph = Climb.phase(); if (ph) out.push(`Climbing plan phase: ${ph.name}, week ${ph.week} of 4.`);
     Coach.insights().slice(0, 5).forEach(i => out.push('Coach note: ' + i.text));
@@ -148,7 +143,6 @@ const Ask = {
     if (topic === 'week') {
       const wk = ws.filter(w => w.start > startOfWeek()), goal = d.settings.weekGoal, mins = Math.round(wk.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0));
       const lines = [`${wk.length} of ${goal} workouts so far, ${Math.floor(mins / 60)} h ${mins % 60} min in total.${wk.length >= goal ? ' Goal reached, nice.' : ` ${goal - wk.length} to go.`}`];
-      const lr = Climb.loadRatio(now); if (lr) lines.push(`Climbing load is ${lr.ratio}× your 4-week average${lr.ratio > 1.5 ? ', a big jump. Keep the rest of the week easy.' : lr.ratio < 0.7 ? ', a light week.' : ', a steady build.'}`);
       if (liftsWeights(14)) { const v = Coach.weeklySets(), low = ['chest', 'lats', 'upper_back', 'quads', 'hamstrings'].filter(m => (v[m] || 0) < 6); if (low.length) lines.push(`Low weekly sets for ${low.map(m => MUSCLES[m].toLowerCase()).join(', ')}. Around 10 hard sets a week per muscle is a good target.`); }
       return lines.join('\n');
     }
@@ -158,26 +152,24 @@ const Ask = {
       const prs = a.reduce((s, w) => s + (w.prs || 0), 0); if (prs) lines.push(`${prs} personal record${prs > 1 ? 's' : ''} in that time.`);
       const va = a.reduce((s, w) => s + workoutVolume(w), 0), vb = b.reduce((s, w) => s + workoutVolume(w), 0);
       if (va && vb) lines.push(`Lifting volume ${va >= vb ? 'up' : 'down'} ${Math.abs(Math.round((va / vb - 1) * 100))}%.`);
-      ['boulder', 'route'].forEach(cat => {
-        const now30 = Climb.stats(cat, 30), all = Climb.stats(cat, 120);
-        if (now30 && now30.top5 != null && all && all.top5 != null) lines.push(`${cat === 'boulder' ? 'Bouldering' : 'Routes'}: top-5 average ${Climb.label(now30.top5, cat)} this month vs ${Climb.label(all.top5, cat)} over 4 months${now30.top5 > all.top5 + 0.2 ? ', so you are climbing harder.' : now30.top5 < all.top5 - 0.5 ? ', a dip. Normal in a base or tired phase.' : ', holding steady.'}`);
-      });
+      const tr = Climb.hangTrend(); if (tr.length >= 2) { const d = tr[tr.length - 1].y - tr[0].y; lines.push(`Strongest hang: ${tr[0].y}% to ${tr[tr.length - 1].y}% of body weight${d > 0 ? ', getting stronger.' : d < 0 ? ', a dip. Normal when tired or after a break.' : ', holding steady.'}`); }
       Coach.insights().filter(i => i.tone === 'success').slice(0, 3).forEach(i => lines.push('• ' + i.text));
       if (lines.length === 1) lines.push('Keep logging. Trends need about 3 weeks of data.');
       return lines.join('\n');
     }
     if (topic === 'stuck') {
       const lines = Coach.insights().filter(i => i.tone === 'warning' || /flat|deload|reduce/i.test(i.text)).slice(0, 4).map(i => '• ' + i.text);
-      ['boulder', 'route'].forEach(cat => Climb.projects(cat).filter(p => p.sessions >= 3).slice(0, 2).forEach(p => lines.push(`• ${p.g} project: ${p.tries} tries over ${p.sessions} sessions, best high point ${Math.round(p.best * 100)}%. Break it into sections, rest 3–5 minutes between goes, and try it first in the session while fresh.`)));
-      const pr = Climb.profile(); if (pr.level) pr.advice.filter(a => a.tone === 'warn').forEach(a => lines.push('• ' + a.text));
       return lines.length ? lines.join('\n') : 'Nothing looks stuck right now. Lifts are moving and nothing has stalled for 3 sessions.';
     }
-    if (topic === 'climb') {
-      const pr = Climb.profile(), lines = [];
-      if (pr.level) lines.push(`You climb about ${Climb.label(pr.level.v, pr.level.cat)} (top-5 average).`);
-      pr.advice.forEach(a => lines.push('• ' + a.text));
+    if (topic === 'fingers') {
+      const f = Climb.fingers(), pp = Climb.pullPct(), fd = Climb.fingerDays(now), lines = [];
+      if (f && f.hang) lines.push(`Strongest hang: ${f.hang.pct}% of body weight (${f.hang.name}${f.hang.edge ? ', ' + f.hang.edge + ' mm' : ''}).`);
+      else lines.push('No max hang logged yet. Do the finger test: Max Hang (Added Weight) on a 20 mm edge, 7–10 s, with your body weight set.');
+      if (f && f.lift) lines.push(`Strongest block lift: ${f.lift.pct}% of body weight.`);
+      if (pp) lines.push(`Pull-up one-rep max: ${pp}% of body weight.`);
+      lines.push(fd >= 3 ? `${fd} days in a row on your fingers. Take a rest day: pulleys recover slower than muscles.` : fd ? `${fd} day(s) in a row on your fingers.` : 'Fingers are rested.');
       const ph = Climb.phase(); if (ph) lines.push(`Plan phase: ${ph.name} (week ${ph.week} of 4). ${ph.desc}`);
-      else lines.push('• Build a climbing plan (Train > Climbing > Climbing coach) for 4-week phases that rotate base, strength, power and performance.');
+      else lines.push('• Build a climbing plan in Train, Plans for 4-week phases with hangboard work.');
       return lines.join('\n');
     }
     return this.local('today');
@@ -193,7 +185,7 @@ const Ask = {
   },
 
   prompt(q, topic) {
-    return `You are a friendly, direct strength and climbing coach inside a training app. Answer the user's question using ONLY the facts below. If the facts don't cover something, say so and suggest what to log. Never invent numbers or exercises the user hasn't done. For pain or injury, recommend seeing a physio. Reply in at most 110 words, plain text, short sentences, no headings.
+    return `You are a friendly, direct strength coach inside a training app. Answer the user's question using ONLY the facts below. If the facts don't cover something, say so and suggest what to log. Never invent numbers or exercises the user hasn't done. For pain or injury, recommend seeing a physio. Reply in at most 110 words, plain text, short sentences, no headings.
 
 FACTS:
 ${this.facts().map(f => '- ' + f).join('\n')}
@@ -233,16 +225,18 @@ Object.assign(UI, {
       : t.kind === 'rest' ? `<button class="btn" data-a="discipline" data-id="mobility">${icon('stretching')} Easy mobility</button>` : '';
     return `<div class="card today today-${tone}"><div class="today-head">${icon(ic, 'today-ic')}<div><div class="muted sm">Today</div><b>${esc(t.title)}</b></div></div>
       <div class="sm">${esc(t.text)}</div>
-      <div class="today-actions">${btn}<button class="btn" data-a="ask">${icon('message-chatbot')} Ask coach</button></div></div>`;
+      <div class="today-meta sm"><span>${icon('heart-rate-monitor')} ${t.score != null ? `Readiness ${t.score}` : 'No check-in yet'}</span>${(() => { const b = Plan.block(); return !b ? '' : b.done ? `<span>${icon('trophy')} ${esc(b.name)} block done</span>` : `<span>${icon('calendar-stats')} ${esc(b.name)} ${b.week}/${b.total} · ${esc(b.label)}</span>`; })()}<button class="link sm" data-a="checkin">${t.score != null ? 'Redo' : 'Check in'}</button></div>
+      <div class="today-actions">${btn}<button class="btn" data-a="ask">${icon('message-chatbot')} Coach</button></div></div>`;
   },
 
   openAsk(topic) {
     Ask.init().then(() => { if (this.top() && this.top().key === 'ask') this.refreshSheet(); });
     if (topic && !this._askBusy) this.askRun(Ask.TOPICS.find(x => x[0] === topic)[1], topic);
-    this.openSheet('ask', 'Ask the coach', () => {
+    this.openSheet('ask', 'Coach', () => {
       const n = Ask.nano, ai = n === 'available';
       const msgs = Ask.history.map(m => `<div class="msg me">${esc(m.q)}</div>${m.a ? `<div class="msg coach">${esc(m.a.text).replace(/\n/g, '<br>')}<div class="msg-src">${m.a.src === 'nano' ? `${icon('cpu')} Gemini Nano, on this phone. AI can be wrong; numbers come from your log.` : `${icon('sparkles')} Built-in coach`}${m.a.note ? ' · ' + esc(m.a.note) : ''}</div></div>` : `<div class="msg coach typing"><span></span><span></span><span></span></div>`}`).join('');
-      return `${!Ask.history.length ? `<div class="ask-intro">${icon('message-chatbot', 'ask-ic')}<div><b>Ask about your training</b><div class="sm muted">Answers use your own log, recovery and check-ins. Everything stays on this phone.</div></div></div>` : ''}
+      const ins = Coach.insights();
+      return `${!Ask.history.length ? `<div class="card">${ins.map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}</div>` : ''}${!Ask.history.length ? `<div class="ask-intro">${icon('message-chatbot', 'ask-ic')}<div><b>Ask about your training</b><div class="sm muted">Answers use your own log, recovery and check-ins. Everything stays on this phone.</div></div></div>` : ''}
         <div class="msgs" id="msgs">${msgs}</div>
         <div class="ask-topics">${Ask.TOPICS.map(([k, l, ic]) => `<button class="ask-chip" data-a="askTopic" data-id="${k}" ${this._askBusy ? 'disabled' : ''}>${icon(ic)}<span>${l}</span></button>`).join('')}</div>
         ${n === 'downloadable' ? `<div class="card sm"><b>${icon('cpu')} On-device AI available</b><div class="muted">This phone supports Gemini Nano. Download it (once, via Android) for free-form answers.</div><button class="btn sm primary" data-a="nanoDownload">Download Gemini Nano</button></div>` : ''}

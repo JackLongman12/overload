@@ -7,8 +7,8 @@ android {
         applicationId "com.overload.gym"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "2.2.0"
+        versionCode 10
+        versionName "2.3.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -51,7 +51,6 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
-    implementation "com.google.android.gms:play-services-wearable:19.0.0"
     // On-device Gemini Nano (AICore) for the optional "Ask the coach" chat
     implementation "com.google.mlkit:genai-prompt:1.0.0-beta4"
     implementation "com.google.guava:guava:33.3.1-android"

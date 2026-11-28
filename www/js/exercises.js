@@ -1,6 +1,6 @@
 // Exercise library.
 // type: wr = weight x reps, bw = bodyweight reps, wbw = weighted bodyweight (added load),
-//       dur = timed hold/round, wdur = weight + hold time (block lifts), hang = edge + grip + weight + time, dist = distance + time, climb = grade + attempts
+//       dur = timed hold/round, wdur = weight + hold time (block lifts), hang = edge + grip + weight + time, dist = distance + time, climb = climbing session time
 // discipline: strength, calisthenics, cardio, mobility, combat, climbing, conditioning
 'use strict';
 
@@ -18,7 +18,7 @@ const DISCIPLINES = {
   conditioning: { name: 'Conditioning', icon: 'flame', desc: 'HIIT, EMOM, Tabata, AMRAP' },
   combat: { name: 'Combat', icon: 'karate', desc: 'Boxing, BJJ, Muay Thai rounds' },
   mobility: { name: 'Mobility and yoga', icon: 'yoga', desc: 'Timed holds and flows' },
-  climbing: { name: 'Climbing', icon: 'mountain', desc: 'Boulder and route grades' }
+  climbing: { name: 'Climbing', icon: 'mountain', desc: 'Hangboard, finger and pulling strength' }
 };
 
 // [name, primary muscle, secondary muscles, equipment, type, discipline, compound?]
@@ -264,13 +264,8 @@ const LADDERS = [
     ['dead_hang', 3, 45], ['hollow_body_hold', 3, 45], ['tuck_front_lever', 3, 15], ['front_lever', 3, 8]] }
 ].map(l => ({ ...l, steps: l.steps.map(([exId, sets, goal]) => ({ exId, sets, goal })) }));
 
-const CLIMB_GRADES = {
-  boulder: ['VB', 'V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'V12'],
-  route: ['5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', '5.11a', '5.11b', '5.11c', '5.11d', '5.12a', '5.12b', '5.12c', '5.12d', '5.13a']
-};
-
 // Ready-made programs (all free). Each routine: [name, [[exerciseId, sets, repMin, repMax], ...]]
-// For timed exercises repMin/repMax are seconds; for distance/climb they're ignored.
+// For timed exercises repMin/repMax are seconds; for distance and climbing sessions they're ignored.
 // goal: muscle | strength | home | conditioning | sport | mobility
 const PROGRAM_GOALS = { muscle: 'Build muscle', strength: 'Get stronger', home: 'At home', conditioning: 'Conditioning', sport: 'Sport', mobility: 'Mobility' };
 const PROGRAMS = [
@@ -360,17 +355,17 @@ const PROGRAMS = [
     ['Fingers and pull', [['hangboard_hang', 6, 7, 10], ['pull_up_weighted', 4, 3, 6], ['archer_pull_up', 3, 3, 6], ['hanging_leg_raise', 3, 8, 12]]],
     ['Antagonist and core', [['push_up', 3, 12, 20], ['overhead_press_barbell', 3, 6, 10], ['wrist_curl_dumbbell', 3, 15, 20], ['tuck_front_lever', 4, 8, 15], ['dragon_flag', 3, 3, 6]]]] },
   { id: 'climb_start', name: 'First-year climber', goal: 'sport', level: 'Beginner', days: 3, equip: 'Climbing gym', desc: 'Lots of easy climbing for technique, plus safe strength work. No hangboard yet.', routines: [
-    ['Technique session', [['bouldering', 12, 0, 0], ['lock_off_hold', 3, 5, 10], ['hanging_leg_raise', 3, 8, 12]]],
-    ['Ropes and pulling', [['top_rope_climbing', 6, 0, 0], ['pull_up', 3, 5, 10], ['shoulder_external_rotation_band', 3, 12, 15]]],
+    ['Technique session', [['bouldering', 1, 0, 0], ['lock_off_hold', 3, 5, 10], ['hanging_leg_raise', 3, 8, 12]]],
+    ['Ropes and pulling', [['top_rope_climbing', 1, 0, 0], ['pull_up', 3, 5, 10], ['shoulder_external_rotation_band', 3, 12, 15]]],
     ['Strength and antagonists', [['dead_hang', 3, 20, 40], ['push_up', 3, 10, 20], ['reverse_wrist_curl', 3, 15, 20], ['finger_extensor_band', 3, 15, 25], ['frog_stretch', 2, 45, 60]]]] },
-  { id: 'boulder_power', name: 'Bouldering power', goal: 'sport', level: 'Advanced', days: 3, equip: 'Climbing gym and hangboard', desc: 'Limit bouldering, max hangs and campusing to push your top grade.', routines: [
-    ['Limit bouldering', [['bouldering', 8, 0, 0], ['max_hang_added_weight', 5, 7, 10], ['front_lever_row', 3, 5, 8]]],
-    ['Board and power', [['board_climbing', 8, 0, 0], ['campus_ladder', 4, 3, 6], ['pull_up_weighted', 4, 3, 5], ['typewriter_pull_up', 3, 3, 6]]],
+  { id: 'boulder_power', name: 'Bouldering power', goal: 'sport', level: 'Advanced', days: 3, equip: 'Climbing gym and hangboard', desc: 'Limit bouldering, max hangs and campusing for raw power and finger strength.', routines: [
+    ['Limit bouldering', [['bouldering', 1, 0, 0], ['max_hang_added_weight', 5, 7, 10], ['front_lever_row', 3, 5, 8]]],
+    ['Board and power', [['board_climbing', 1, 0, 0], ['campus_ladder', 4, 3, 6], ['pull_up_weighted', 4, 3, 5], ['typewriter_pull_up', 3, 3, 6]]],
     ['Antagonists and mobility', [['push_up', 3, 12, 20], ['shoulder_external_rotation_band', 3, 12, 15], ['reverse_wrist_curl', 3, 15, 20], ['frog_stretch', 2, 45, 60], ['high_step_mobility', 2, 8, 12]]]] },
   { id: 'route_endurance', name: 'Route endurance', goal: 'sport', level: 'Intermediate', days: 3, equip: 'Climbing gym and hangboard', desc: 'Stop getting pumped: ARC, 4x4s and repeaters for sport and trad climbers.', routines: [
     ['Aerobic base', [['arc_traversing', 2, 900, 1200], ['repeaters_7_3', 4, 42, 70], ['lock_off_hold', 3, 5, 10]]],
     ['Power endurance', [['4x4_bouldering', 4, 240, 300], ['frenchies', 3, 3, 5], ['hanging_leg_raise', 3, 8, 12]]],
-    ['Route volume', [['lead_climbing', 6, 0, 0], ['auto_belay_laps', 4, 0, 0], ['reverse_wrist_curl', 3, 15, 20]]]] },
+    ['Route volume', [['lead_climbing', 1, 0, 0], ['auto_belay_laps', 1, 0, 0], ['reverse_wrist_curl', 3, 15, 20]]]] },
 
   // ---------- Mobility
   { id: 'mob', name: 'Daily mobility', goal: 'mobility', level: 'Beginner', days: 7, equip: 'None', desc: '15 minutes, every day. Hips, spine and shoulders.', routines: [

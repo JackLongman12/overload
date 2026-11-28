@@ -47,7 +47,7 @@ const Plan = {
 
   // Applied after the base suggestion (before readiness)
   apply(ex, t, s, hist) {
-    if (!s || !s.sets || !hist.length) return s;
+    if (!s || !s.sets || !hist.length || ex.type === 'climb') return s;
     const loaded = ex.type === 'wr' || ex.type === 'wbw';
     // % of max loading
     if (loaded && t.pct) {

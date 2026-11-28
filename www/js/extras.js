@@ -51,7 +51,7 @@ const ShareImage = {
     g.fillStyle = '#8b93a1'; font(34, 500); g.fillText(fmtDate(w.start, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }), 72, 110);
     g.fillStyle = '#eef0f3'; font(76, 800); g.fillText(w.name.slice(0, 22), 72, 200);
     const mins = Math.round(((w.end || w.start) - w.start) / 60000), sets = w.exercises.reduce((a, e) => a + e.sets.length, 0);
-    const stats = [['Duration', mins + ' min'], ['Volume', fmtNum(workoutVolume(w)) + ' ' + U()], ['Sets', String(sets)]];
+    const stats = [['Duration', mins + ' min'], workoutVolume(w) > 0 ? ['Volume', fmtNum(workoutVolume(w)) + ' ' + U()] : ['Result', workoutStat(w).text], ['Sets', String(sets)]];
     if (w.prs) stats.push(['Records', String(w.prs)]);
     stats.forEach(([k, v], i) => { const x = 72 + i * 250; g.fillStyle = '#181b21'; g.fillRect(x, 250, 230, 150); g.fillStyle = '#8b93a1'; font(30, 500); g.fillText(k, x + 24, 300); g.fillStyle = '#eef0f3'; font(48, 800); g.fillText(v, x + 24, 370); });
     let y = 480;
@@ -117,11 +117,8 @@ const Achievements = {
     ['ladder', 'Skill unlocked', 'Complete any skill ladder', s => s.laddersDone >= 1],
     ['multi', 'All-rounder', 'Train 4 different disciplines', s => s.disciplines >= 4],
     ['block', 'Periodized', 'Finish a 5-week training block', s => s.blocks >= 1],
-    ['c1', 'First send', 'Log a sent climb', s => s.sends >= 1],
-    ['cflash', 'Flash', 'Flash a boulder or route', s => s.flashes >= 1],
-    ['c100', 'Hundred climbs', 'Log 100 climbs', s => s.climbs >= 100],
-    ['cv5', 'V5 club', 'Send V5 (6C) or harder', s => s.boulderMax >= 5],
-    ['cv8', 'V8 club', 'Send V8 (7B) or harder', s => s.boulderMax >= 8],
+    ['c10', 'Regular climber', 'Log 10 climbing sessions', s => s.climbSessions >= 10],
+    ['f120', 'Strong fingers', 'Hang 120% of body weight', s => s.fingerPct >= 120],
     ['f150', 'Steel fingers', 'Hang 150% of body weight', s => s.fingerPct >= 150]
   ],
   stats() {
@@ -135,8 +132,7 @@ const Achievements = {
       benchBW: bw ? best('bench_press_barbell') / bw : 0, squatBW: bw ? best('squat_barbell') / bw : 0, deadBW: bw ? best('deadlift_barbell') / bw : 0,
       longestRun: Math.max(0, ...runs), laddersDone: LADDERS.filter(l => Coach.ladderProgress(l) >= l.steps.length).length,
       disciplines: disc.size, blocks: d.settings.blocksDone || 0,
-      ...(() => { const c = Climb.climbs(0), sent = c.filter(x => x.sent), b = sent.filter(x => x.cat === 'boulder').map(x => x.v), f = Climb.fingers();
-        return { climbs: c.length, sends: sent.length, flashes: sent.filter(x => Climb.isFlash(x)).length, boulderMax: b.length ? Math.max(...b) : -1, fingerPct: f && f.hang ? f.hang.pct : 0 }; })()
+      ...(() => { const f = Climb.fingers(); return { climbSessions: Climb.climbSessions(), fingerPct: f && f.hang ? f.hang.pct : 0 }; })()
     };
   },
   unlocked() { const s = this.stats(); return new Set(this.LIST.filter(a => a[3](s)).map(a => a[0])); },
@@ -164,7 +160,7 @@ const Report = {
     const line = (txt, size = 11, bold = false, color = [30, 30, 30]) => { if (y > 790) { doc.addPage(); y = 60; } doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.setTextColor(...color); doc.text(String(txt), M, y); y += size + 7; };
     doc.setFillColor(61, 139, 253); doc.rect(0, 0, W, 8, 'F');
     line('Gym App progress report', 22, true);
-    line(`${fmtDate(since, { day: 'numeric', month: 'long', year: 'numeric' })} to ${fmtDate(Date.now(), { day: 'numeric', month: 'long', year: 'numeric' })}${d.settings.name ? ' · ' + d.settings.name : ''}`, 11, false, [110, 110, 110]);
+    line(`${fmtDate(since, { day: 'numeric', month: 'long', year: 'numeric' })} to ${fmtDate(Date.now(), { day: 'numeric', month: 'long', year: 'numeric' })}`, 11, false, [110, 110, 110]);
     y += 6;
     const vol = ws.reduce((a, w) => a + workoutVolume(w), 0), mins = ws.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0), prs = ws.reduce((a, w) => a + (w.prs || 0), 0);
     line('Summary', 14, true);

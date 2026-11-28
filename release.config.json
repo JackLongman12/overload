@@ -1,7 +1,7 @@
 {
   "repo": "JackLongman12/overload",
-  "apkVersionCode": 9,
-  "apkVersionName": "2.2.0",
-  "notes": "Today card: one clear answer to what to train, with swaps when muscles or fingers need rest. Ask the coach: questions answered from your own log, with on-device Gemini Nano on supported phones. Quick climb log: tap a grade per climb. Climbing days show climbs and top grade instead of 0 kg, the coach gives climbing advice, and there are climbing achievements.",
+  "apkVersionCode": 10,
+  "apkVersionName": "2.3.0",
+  "notes": "Simpler app. Home is the Today card (with readiness and your training block), your routines and the week. Train has Plans (programs, builder, blocks, climbing plan), four exercise categories, three timers and one Calculators page. Progress keeps the coach, chart, body map, best lifts and history. Backup and sync is one page. Climbing grades are gone: climbing sessions log time, and hangboard and finger strength stay. Removed: camera rep counter, Bluetooth scale and heart-rate strap, Wear OS app, error log.",
   "bundleMinApk": 5
 }

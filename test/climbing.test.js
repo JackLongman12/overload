@@ -2,66 +2,35 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fresh, DAY } = require('./harness');
 
-// A climbing session: climbs = [[grade, sent, result, tries, angle]]
-function climbs(app, exId, daysAgo, list) {
+// A climbing session logged as time (seconds)
+function session(app, exId, daysAgo, secs) {
   const t = Date.now() - daysAgo * DAY;
-  app.Store.data.workouts.push({ id: app.uid(), name: 'Climb', start: t, end: t + 7200e3, exercises: [{ exId, sets: list.map(([g, sent, st, a, ang]) => ({ type: 'N', g, sent, st: st || (sent ? 'sent' : ''), a: a || 1, ang: ang || '', done: true })) }] });
+  app.Store.data.workouts.push({ id: app.uid(), name: 'Climb', start: t, end: t + 7200e3, exercises: [{ exId, sets: [{ type: 'N', t: secs, done: true }] }] });
 }
 
-test('grades convert between V and Font, and YDS and French', async () => {
+test('climbing sessions are logged as time only; old graded climbs still load', async () => {
   const app = await fresh();
-  const C = app.Climb;
-  assert.equal(C.value('V5', 'boulder'), 5);
-  assert.equal(C.value('6C', 'boulder'), 5);
-  assert.equal(C.value('7a', 'route'), C.value('5.11d', 'route'));
-  app.Store.data.settings.boulderScale = 'Font';
-  assert.equal(C.show('V7', 'boulder'), '7A+');
-  assert.equal(C.show('V4', 'boulder'), '6B');
-  app.Store.data.settings.routeScale = 'French';
-  assert.equal(C.show('5.10a', 'route'), '6a');
-  // Rounds down, never overstates
-  assert.equal(C.label(5.5, 'boulder'), '6C+');
-  assert.equal(C.label(11, 'route'), '6c+');
+  const ex = app.Store.ex('bouldering');
+  assert.equal(JSON.stringify(app.setColumns(ex)), JSON.stringify(['tt']));
+  assert.equal(app.prevText(ex, { t: 5400 }), '1:30:00');
+  // A climb logged with a grade before 2.3.0 still shows up (as done) instead of breaking
+  assert.equal(app.prevText(ex, { g: 'V4', sent: true }), '✓');
+  assert.equal(app.Coach.defaultTarget(ex).sets, 1);
 });
 
-test('climbing stats: hardest send, flash, top-5, pyramid, send rate, angles', async () => {
+test('climbing coach asks for the session time, keeps it, and eases off after 3 finger days', async () => {
   const app = await fresh();
-  climbs(app, 'bouldering', 2, [['V3', true, 'flash', 1, 'vert'], ['V4', true, 'sent', 3, 'over'], ['V5', false, '', 4, 'over'], ['V4', true, 'redpoint', 2, 'slab'], ['V2', true, '', 1, 'vert']]);
-  climbs(app, 'lead_climbing', 1, [['5.10a', true, 'onsight', 1]]);
-  const st = app.Climb.stats('boulder', 90);
-  assert.equal(st.n, 5);
-  assert.equal(st.sends, 4);
-  assert.equal(st.max, 4);
-  assert.equal(st.flash, 3);
-  assert.equal(st.top5, (4 + 4 + 3 + 2) / 4);
-  assert.equal(st.sendRate, 0.8);
-  assert.equal(JSON.stringify(st.pyramid.map(p => [p.g, p.sent, p.tried])), JSON.stringify([['V5', 0, 1], ['V4', 2, 2], ['V3', 1, 1], ['V2', 1, 1]]));
-  assert.equal(st.angles.over.n, 1);
-  assert.equal(app.Climb.stats('route', 90).max, app.Climb.value('5.10a', 'route'));
-});
-
-test('climbing coach plans a pyramid and moves the project up after 3 sends', async () => {
-  const app = await fresh();
-  climbs(app, 'bouldering', 9, [['V3', true], ['V4', true], ['V4', true]]);
   let s = app.Coach.suggest('bouldering');
-  assert.match(s.title, /Consolidate V4/);
-  assert.equal(JSON.stringify(s.sets.map(x => x.g)), JSON.stringify(['V2', 'V2', 'V3', 'V3', 'V4', 'V4']));
-  climbs(app, 'bouldering', 6, [['V4', true]]);
+  assert.equal(s.kind, 'new');
+  assert.equal(s.sets.length, 1);
+  session(app, 'bouldering', 9, 5400);
   s = app.Coach.suggest('bouldering');
-  assert.match(s.title, /Project V5/);
-  assert.equal(s.sets[s.sets.length - 1].g, 'V5');
-  assert.equal(s.sets[s.sets.length - 1].a, 3);
-});
-
-test('climbing coach suggests easy volume after 3 finger days in a row', async () => {
-  const app = await fresh();
-  climbs(app, 'bouldering', 3, [['V4', true], ['V4', true], ['V4', true]]);
-  climbs(app, 'bouldering', 2, [['V4', true]]);
-  climbs(app, 'bouldering', 1, [['V4', true]]);
-  climbs(app, 'bouldering', 0, [['V3', true]]);
-  const s = app.Coach.suggest('bouldering');
+  assert.equal(s.kind, 'climb');
+  assert.equal(s.sets[0].t, 5400);
+  [2, 1, 0].forEach(d => session(app, 'bouldering', d, 5400));
+  s = app.Coach.suggest('bouldering');
   assert.equal(s.kind, 'deload');
-  assert.ok(s.sets.every(x => app.Climb.value(x.g, 'boulder') <= 2));
+  assert.ok(s.sets[0].t < 5400);
 });
 
 test('max hangs add weight when every set holds the full time; strength as % body weight', async () => {

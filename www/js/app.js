@@ -11,6 +11,8 @@ const UI = {
     await Store.load();
     await Sync.load();
     applyLook();
+    // 2.3.0 removed the camera rep counter: free the space its AI pack used
+    if (Store.data.settings.aiPack) { const fs = Plugin('Filesystem'); if (fs) fs.rmdir({ path: 'ai', directory: 'DATA', recursive: true }).catch(() => { }); delete Store.data.settings.aiPack; Store.save(); }
     this.bind();
     if (HC.on) HC.pull().then(() => { if (!this.stack.length) this.render(); });
     Companion.init();
@@ -66,7 +68,7 @@ const UI = {
   },
   onSyncState() {
     const el = $('#syncLabel'); if (el) el.textContent = Sync.label();
-    if (this.stack.length && this.top().key === 'account') this.refreshSheet();
+    if (this.stack.length && this.top().key === 'data') this.refreshSheet();
   },
   onUpdateState() { this.renderBanner(); if (this.stack.length && this.top().key === 'settings') this.refreshSheet(); },
 
@@ -98,32 +100,19 @@ const UI = {
   // ---------- Tabs
   tab_home() {
     const d = Store.data, a = d.active;
-    const ci = Store.latestCheckin();
     const wk = d.workouts.filter(w => w.start > startOfWeek());
-    const vol = wk.reduce((s, w) => s + workoutVolume(w), 0);
-    const wkClimbs = Climb.climbs(7).filter(c => c.date > startOfWeek()).length;
-    const rec = Coach.recovery();
-    const recList = Object.entries(rec).filter(([m]) => !['cardio', 'mobility', 'full_body'].includes(m));
+    const vol = wk.reduce((s, w) => s + workoutVolume(w), 0), sets = wk.reduce((s, w) => s + w.exercises.reduce((b, e) => b + e.sets.length, 0), 0);
     const hr = new Date().getHours();
     const greet = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
     const lastB = d.settings.lastBackup || 0, firstW = d.workouts.length ? Math.min(...d.workouts.map(w => w.start)) : Date.now();
-    const needBackup = d.workouts.length >= 3 && Date.now() - Math.max(lastB, firstW) > 30 * 864e5;
+    const needBackup = !(Sync.acct && Sync.acct.token) && d.workouts.length >= 3 && Date.now() - Math.max(lastB, firstW) > 30 * 864e5;
     return `
-    <div class="page-head"><div><div class="muted sm">${fmtDate(Date.now(), { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>${greet}${d.settings.name ? ', ' + esc(d.settings.name) : ''}</h1></div></div>
+    <div class="page-head"><div><div class="muted sm">${fmtDate(Date.now(), { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>${greet}</h1></div></div>
     ${a ? `<button class="card accent-card" data-a="openWorkout">${icon('player-play')} <div><b>Resume ${esc(a.name)}</b><div class="sm">${a.exercises.length} exercises · started ${fmtTime(a.start)}</div></div></button>` : this.todayCard()}
-    ${needBackup ? `<div class="card warn-card"><div class="row-between"><div><b>${icon('database-export')} Back up your training</b><div class="sm">${lastB ? 'Last backup ' + fmtDate(lastB, { day: 'numeric', month: 'short' }) : 'You haven\'t made a backup yet'}. Save a copy to Drive or email so a lost phone doesn't mean lost progress.</div></div><button class="btn sm primary" data-a="exportJSON">Back up</button></div></div>` : ''}
-    <div class="card">
-      <div class="row-between"><div><div class="muted sm">Readiness today</div>
-      ${ci ? `<div class="big">${ci.score}<span class="muted sm"> / 100</span></div><div class="sm muted">${readinessLabel(ci.score)}</div>` : `<div class="sm">Check in so the coach can adjust today's targets.</div>`}</div>
-      ${d.health && (d.health.steps || d.health.sleepH) ? `<div class="sm muted">${d.health.steps ? `${icon('shoe')} ${fmtNum(d.health.steps)} steps today` : ''}${d.health.sleepH ? `${d.health.steps ? ' · ' : ''}${icon('moon')} ${d.health.sleepH} h sleep${d.health.sleep ? ' (' + esc(d.health.sleep.source) + ')' : ''}` : ''}</div>` : ''}
-      <button class="btn ${ci ? '' : 'primary'}" data-a="checkin">${icon('heart-rate-monitor')} ${ci ? 'Redo' : 'Check in'}</button></div>
-    </div>
-    ${(() => { const b = Plan.block(); if (!b) return ''; return b.done
-      ? `<div class="card accent-card col"><b>${icon('trophy')} ${esc(b.name)} block complete</b><div class="sm">Start the next block to keep progressing.</div><div class="grid2"><button class="btn sm primary" data-a="startBlock" data-id="${b.type}">Start another</button><button class="btn sm" data-a="endBlock">Not now</button></div></div>`
-      : `<div class="card block-card"><div class="row-between"><b>${icon('calendar-stats')} ${esc(b.name)}: week ${b.week} of ${b.total}</b><span class="tag-next">${esc(b.label)}</span></div><div class="progress"><div style="width:${b.week / b.total * 100}%"></div></div><div class="sm muted">${esc(b.note)} Target RPE ${b.rpe}.</div></div>`; })()}
+    ${needBackup ? `<button class="card warn-card" data-a="dataSheet">${icon('database-export')} <div><b>Back up your training</b><div class="sm">${lastB ? 'Last backup ' + fmtDate(lastB, { day: 'numeric', month: 'short' }) : 'No backup yet'}. Tap to save a copy or turn on sync.</div></div></button>` : ''}
     <div class="grid2">
       <button class="btn big-btn primary" data-a="startEmpty">${icon('plus')} Empty workout</button>
-      <button class="btn big-btn" data-a="programs">${icon('books')} Programs</button>
+      <button class="btn big-btn" data-a="programs">${icon('books')} Plans</button>
     </div>
     <div class="section-head"><h3>Routines</h3><button class="link" data-a="newRoutine">${icon('plus')} New</button></div>
     ${d.routines.length ? routineGroups(d).map(g => `
@@ -133,42 +122,29 @@ const UI = {
         <div class="routine-main" data-a="editRoutine" data-id="${r.id}"><b>${esc(r.name)}</b>${r.id === g.next ? ' <span class="tag-next">Next</span>' : ''}
         <div class="sm muted clamp">${r.exercises.map(e => esc(Store.ex(e.exId).name)).join(', ') || 'No exercises'}</div></div>
         <button class="btn primary sm" data-a="startRoutine" data-id="${r.id}">Start</button>
-      </div>`).join('')}`).join('') : `<div class="empty">Create a routine or add a ready-made program. Routines are unlimited and free.</div>`}
+      </div>`).join('')}`).join('') : `<div class="empty">Create a routine or add a plan. Routines are unlimited and free.</div>`}
     <div class="section-head"><h3>This week</h3></div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${wk.length}<span class="muted sm"> / ${d.settings.weekGoal}</span></b></div>
-      ${vol > 0 || !wkClimbs ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(vol)}<span class="muted sm"> ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Climbs</div><b>${wkClimbs}</b></div>`}
+      ${vol > 0 ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(vol)}<span class="muted sm"> ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div>`}
       <div class="stat"><div class="muted sm">Time</div><b>${fmtDur(wk.reduce((s, w) => s + ((w.end || w.start) - w.start) / 1000, 0)).replace(/:\d\d$/, '')}<span class="muted sm"> h</span></b></div>
     </div>
-    <div class="section-head"><h3>Muscle recovery</h3><span class="muted sm">estimated</span></div>
-    <div class="card">${BodyMap.svg(rec, 'recovery')}${BodyMap.legend('recovery')}${recoveryList()}</div>
     <div style="height:20px"></div>`;
   },
 
   tab_train() {
     return `
     <div class="page-head"><h1>Train</h1></div>
-    <div class="section-head"><h3>Disciplines</h3></div>
-    <div class="grid2">${Object.entries(DISCIPLINES).map(([k, v]) => `
-      <button class="card disc" data-a="discipline" data-id="${k}">${icon(v.icon, 'disc-ic')}<b>${v.name}</b><span class="sm muted">${v.desc}</span></button>`).join('')}</div>
+    <button class="card accent-card" data-a="programs">${icon('books')}<div><b>Plans</b><div class="sm">Ready-made programs, build your own, training blocks and the climbing plan</div></div></button>
+    <div class="section-head"><h3>Exercises</h3><button class="link" data-a="allExercises">All ${Store.allExercises().length}</button></div>
+    <div class="grid2">${TRAIN_DISCIPLINES.map(k => { const v = DISCIPLINES[k]; return `
+      <button class="card disc" data-a="discipline" data-id="${k}">${icon(v.icon, 'disc-ic')}<b>${v.name}</b><span class="sm muted">${v.desc}</span></button>`; }).join('')}</div>
     <div class="section-head"><h3>Timers</h3></div>
-    <div class="grid3">${Object.entries(TIMER_PRESETS).map(([k, v]) => `
-      <button class="card tile" data-a="timerSetup" data-id="${k}">${icon(v.icon)}<b>${v.name}</b></button>`).join('')}</div>
-    <div class="section-head"><h3>Skill ladders</h3></div>
-    ${LADDERS.map(l => { const p = Coach.ladderProgress(l); return `
-      <button class="card ladder" data-a="ladder" data-id="${l.id}"><div class="row-between"><b>${l.name}</b><span class="sm muted">${p}/${l.steps.length}</span></div>
-      <div class="progress"><div style="width:${p / l.steps.length * 100}%"></div></div>
-      <div class="sm muted">${p >= l.steps.length ? 'Ladder complete' : 'Current step: ' + esc(Store.ex(l.steps[Math.min(p, l.steps.length - 1)].exId).name)}</div></button>`; }).join('')}
+    <div class="grid3">${Object.entries(TIMER_GROUPS).map(([k, g]) => `
+      <button class="card tile" data-a="timerGroup" data-id="${k}">${icon(g.icon)}<b>${g.name}</b><span class="sm muted">${g.desc}</span></button>`).join('')}</div>
     <div class="section-head"><h3>Tools</h3></div>
-    <div class="grid3">
-      <button class="card tile" data-a="tool" data-id="plates">${icon('circle-dot')}<b>Plates</b></button>
-      <button class="card tile" data-a="tool" data-id="warmup">${icon('temperature')}<b>Warm-up</b></button>
-      <button class="card tile" data-a="tool" data-id="onerm">${icon('calculator')}<b>1RM</b></button>
-      <button class="card tile" data-a="tool" data-id="cali">${icon('stretching')}<b>Calisthenics 1RM</b></button>
-      <button class="card tile" data-a="tool" data-id="convert">${icon('arrows-exchange')}<b>Bodyweight ↔ barbell</b></button>
-      <button class="card tile" data-a="tool" data-id="standards">${icon('trophy')}<b>Strength level</b></button>
-      <button class="card tile" data-a="tool" data-id="rpe">${icon('gauge')}<b>RPE chart</b></button>
-    </div><div style="height:20px"></div>`;
+    <button class="card accent-card" data-a="calculators">${icon('calculator')}<div><b>Calculators</b><div class="sm">1RM, RPE chart, strength level, bodyweight strength</div></div></button>
+    <div style="height:20px"></div>`;
   },
 
   tab_progress() {
@@ -182,37 +158,29 @@ const UI = {
     }
     const lifts = weeks.some(w => w.v > 0), totalMin = ws.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0);
     if (!lifts) weeks.forEach(w => { w.v = w.m; });
-    const since = Date.now() - 30 * 864e5, musc = {};
-    ws.filter(w => w.start > since).forEach(w => w.exercises.forEach(e => { const ex = Store.ex(e.exId); musc[ex.muscle] = (musc[ex.muscle] || 0) + e.sets.filter(s => s.type !== 'W').length; }));
-    const mList = Object.entries(musc).sort((a, b) => b[1] - a[1]);
-    const mMax = Math.max(1, ...mList.map(x => x[1]));
     const prs = topLifts().slice(0, 8);
+    const f = Climb.fingers(), u = Achievements.unlocked().size;
     return `
     <div class="page-head"><h1>Progress</h1></div>
-    <div class="section-head"><h3>${icon('sparkles')} Coach</h3><button class="link" data-a="ask">${icon('message-chatbot')} Ask</button></div>
-    <div class="card">${(this._allIns ? ins : ins.slice(0, 4)).map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}${ins.length > 4 ? `<button class="link sm" data-a="toggleIns">${this._allIns ? 'Show less' : `Show all ${ins.length}`}</button>` : ''}<div class="sm muted" style="padding-top:8px">General guidance, not medical advice. <button class="link sm" data-a="disclaimer">Health and safety</button></div></div>
+    <div class="section-head"><h3>${icon('sparkles')} Coach</h3><button class="link" data-a="ask">${icon('message-chatbot')} Open coach</button></div>
+    <div class="card">${ins.slice(0, 2).map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}${ins.length > 2 ? `<button class="link sm" data-a="ask">${ins.length - 2} more in the coach</button>` : ''}</div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${ws.length}</b></div>
       <div class="stat"><div class="muted sm">Week streak</div><b>${weekStreak()}</b></div>
-      ${lifts ? `<div class="stat"><div class="muted sm">Total volume</div><b>${fmtNum(ws.reduce((a, w) => a + workoutVolume(w), 0) / 1000)}<span class="muted sm">k ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Training time</div><b>${fmtNum(Math.round(totalMin / 60))}<span class="muted sm"> h</span></b></div>`}
+      ${lifts ? `<div class="stat"><div class="muted sm">Total volume</div><b>${fmtNum(ws.reduce((a, w) => a + workoutVolume(w), 0) / 1000)}<span class="muted sm">k ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Training time</div><b>${Math.round(totalMin / 60)}<span class="muted sm"> h</span></b></div>`}
     </div>
-    ${Climb.climbs(365).length ? (() => { const b = Climb.stats('boulder', 90), r = Climb.stats('route', 90); return `<button class="card accent-card" data-a="climbStats">${icon('mountain')}<div><b>Climbing coach</b><div class="sm">${[b && b.max != null ? 'Boulder ' + Climb.label(b.max, 'boulder') : '', r && r.max != null ? 'Route ' + Climb.label(r.max, 'route') : ''].filter(Boolean).join(' · ') || 'Grade pyramid, flash grade, send rate'}</div></div></button>`; })() : ''}
+    ${f || Climb.climbSessions() ? `<button class="card accent-card" data-a="climbStats">${icon('hand-grab')}<div><b>Climbing strength</b><div class="sm">${f && f.hang ? `Strongest hang ${f.hang.pct}% of body weight` : 'Finger strength, hangboard progress and the climbing plan'}</div></div></button>` : ''}
     <div class="card"><div class="row-between"><b>${lifts ? 'Weekly volume' : 'Weekly training time'}</b><span class="muted sm">${lifts ? U() : 'minutes'}</span></div>${barChart(weeks, { label: lifts ? 'weekly volume' : 'weekly minutes', fmt: fmtNum })}</div>
     <div class="card"><div class="row-between"><b>${this._mapMode === 'recovery' ? 'Recovery right now' : 'Muscles trained this week'}</b><button class="link sm" data-a="mapMode">${this._mapMode === 'recovery' ? 'Show sets' : 'Show recovery'}</button></div>
       ${this._mapMode === 'recovery' ? BodyMap.svg(Coach.recovery(), 'recovery') : BodyMap.svg(Coach.weeklySets(), 'sets')}
       ${BodyMap.legend(this._mapMode === 'recovery' ? 'recovery' : 'sets')}${this._mapMode === 'recovery' ? recoveryList() : ''}</div>
-    <div class="card"><b>Consistency</b>${heatmap(ws)}</div>
-    <div class="card"><b>Sets per muscle, last 30 days</b>
-      ${mList.length ? mList.map(([m, v]) => `<div class="hbar"><span>${MUSCLES[m] || m}</span><div><div style="width:${v / mMax * 100}%"></div></div><span>${v}</span></div>`).join('') : '<div class="empty-chart">No data yet</div>'}</div>
-    ${!prs.length && Climb.climbs(365).length ? '' : `<div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
-    ${prs.length ? `<div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : '<div class="empty">Personal records show up here.</div>'}`}
-    <div class="section-head"><h3>${icon('award')} Achievements</h3><span class="muted sm">${Achievements.unlocked().size} of ${Achievements.LIST.length}</span></div>
-    ${(() => { const u = Achievements.unlocked(), got = Achievements.LIST.filter(a => u.has(a[0])), next = Achievements.LIST.filter(a => !u.has(a[0])), show = this._allBadges ? got.concat(next) : got.concat(next.slice(0, 3));
-      return `<div class="badges">${show.map(([id, name, desc]) => `<div class="badge ${u.has(id) ? 'on' : ''}" title="${esc(desc)}">${icon(u.has(id) ? 'award' : 'lock')}<b>${esc(name)}</b><span>${esc(desc)}</span></div>`).join('')}</div>${next.length > 3 ? `<button class="link sm" data-a="toggleBadges">${this._allBadges ? 'Show less' : `Show all ${Achievements.LIST.length}`}</button>` : ''}`; })()}
-    <div class="grid2" style="margin-top:12px"><button class="btn" data-a="report" data-id="30">${icon('file-type-pdf')} 30-day report</button><button class="btn" data-a="report" data-id="90">${icon('file-type-pdf')} 90-day report</button></div>
+    ${prs.length ? `<div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
+    <div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : ''}
     <div class="section-head"><h3>History</h3><span class="muted sm">${ws.length} workouts</span></div>
     ${ws.slice(0, this._histN || 15).map(w => historyCard(w)).join('') || '<div class="empty">Finished workouts show up here.</div>'}
     ${ws.length > (this._histN || 15) ? `<button class="btn wide" data-a="moreHistory">Show more</button>` : ''}
+    ${ws.length ? `<button class="btn wide" data-a="report" data-id="30">${icon('file-type-pdf')} Share a 30-day report (PDF)</button>` : ''}
+    <div class="card list"><button class="li" data-a="badges">${icon('award')}<span>Achievements</span><span class="muted sm">${u} of ${Achievements.LIST.length}</span>${icon('chevron-right', 'muted')}</button></div>
     <div style="height:20px"></div>`;
   },
 
@@ -229,18 +197,16 @@ const UI = {
     <div class="card"><div class="row-between"><b>Progress photos</b><label class="btn sm">${icon('camera')} Add<input type="file" accept="image/*" data-a-change="addPhoto" hidden></label></div>
       <div class="photos">${Store.photos.slice().reverse().slice(0, 9).map(p => `<button data-a="viewPhoto" data-id="${p.id}"><img src="${Photos.src(p)}" alt="Progress photo, ${fmtDate(p.date)}"><span>${fmtDate(p.date, { day: 'numeric', month: 'short' })}</span></button>`).join('') || '<div class="sm muted">Photos stay on this phone.</div>'}</div></div>
     <div class="card list">
-      <button class="li" data-a="devices">${icon('device-watch')}<span>Watches, scales and sensors</span><span class="muted sm">${[HC.on ? 'Health Connect' : '', BLE.hrDevice ? 'HR' : ''].filter(Boolean).join(', ') || 'Connect'}</span></button>
-      <button class="li" data-a="account">${icon('cloud')}<span>Account and sync</span><span class="muted sm" id="syncLabel">${Sync.label()}</span></button>
-      <button class="li" data-a="settings">${icon('settings')}<span>Settings</span>${icon('chevron-right', 'muted')}</button>
-      <button class="li" data-a="dataSheet">${icon('file-import')}<span>Import, export and sync</span>${icon('chevron-right', 'muted')}</button>
-      <button class="li" data-a="updates">${icon('refresh')}<span>App updates</span><span class="muted sm">v${esc(Updater.bundleVersion)}</span></button>
+      <button class="li" data-a="devices">${icon('heart-rate-monitor')}<span>Health Connect</span><span class="muted sm">${HC.on ? 'Linked' : 'Link watch and sleep data'}</span></button>
+      <button class="li" data-a="dataSheet">${icon('cloud')}<span>Backup and sync</span><span class="muted sm" id="syncLabel">${Sync.label()}</span></button>
+      <button class="li" data-a="settings">${icon('settings')}<span>Settings</span><span class="muted sm">v${esc(Updater.bundleVersion)}</span></button>
       <button class="li" data-a="allExercises">${icon('list')}<span>Exercise library</span><span class="muted sm">${Store.allExercises().length}</span></button>
     </div>
     <div class="card list">
       <button class="li" data-a="disclaimer">${icon('stethoscope')}<span>Health and safety</span>${icon('chevron-right', 'muted')}</button>
       <button class="li" data-a="privacy">${icon('shield-lock')}<span>Privacy policy</span>${icon('external-link', 'muted')}</button>
     </div>
-    <div class="card about sm muted">${icon('lock-open')} Every feature is free. No account, no ads, no paywall. Your data stays on your device.</div>
+    <div class="card about sm muted">${icon('lock-open')} Every feature is free. No ads, no paywall. Your data stays on your device unless you turn on encrypted sync.</div>
     <div style="height:20px"></div>`;
   },
 
@@ -248,7 +214,6 @@ const UI = {
   newWorkout(name, routine) {
     const ex = routine ? routine.exercises.map(re => this.makeWorkoutEx(re.exId, { sets: re.sets, repMin: re.repMin, repMax: re.repMax, pct: re.pct || undefined, rpe: re.rpe || undefined }, re.rest)) : [];
     Store.data.active = { id: uid(), name: name || 'Workout', routineId: routine ? routine.id : null, start: Date.now(), exercises: ex, readiness: Coach.readiness() };
-    BLE.autoHR();
     Store.save(true);
     this.openWorkout();
   },
@@ -262,7 +227,7 @@ const UI = {
       warmupSets(+sug.sets[0].w).slice(0, 3).reverse().forEach(ws => sets.unshift({ type: 'W', w: '', r: '', rpe: '', done: false, p: ws }));
     }
     const P = ex.type === 'hang' ? Climb.protocol(ex).timer : null;
-    return { exId, target: t, rest: rest || (ex.type === 'dist' ? 0 : P ? (P.setRest || P.rest) : ex.type === 'climb' ? 180 : Store.data.settings.rest), notes: '', ss: false, sets };
+    return { exId, target: t, rest: rest || (ex.type === 'dist' ? 0 : P ? (P.setRest || P.rest) : ex.type === 'climb' ? 0 : Store.data.settings.rest), notes: '', ss: false, sets };
   },
 
   openWorkout() {
@@ -279,7 +244,7 @@ const UI = {
       ${Store.data.workouts.length < 3 && !Store.data.settings.hideLogTips ? `<div class="card tip-card sm"><b>${icon('info-circle')} How to log a workout</b>
         <ol><li>The grey numbers are what you did last time. Type what you actually do in each box.</li><li>Tap ${icon('check')} when you finish a set. The rest timer starts by itself.</li><li>The blue coach box says what to aim for today. Tap <b>Apply</b> to fill it in.</li><li>Tap an exercise name for how to do it.</li><li>Tap <b>Finish</b> at the top when you're done.</li></ol>
         <button class="link sm" data-a="hideLogTips">Got it, hide this</button></div>` : ''}
-      <div class="row muted sm wstats">${vol > 0 || !a.exercises.some(e => Store.ex(e.exId).type === 'climb') ? `<span>${icon('weight')} ${fmtNum(vol)} ${U()}</span>` : (st => `<span>${icon(st.icon)} ${esc(st.text)}</span>`)(workoutStat(a))}<span>${icon('check')} ${done} sets</span>${a.readiness != null ? `<span>${icon('heart-rate-monitor')} readiness ${a.readiness}</span>` : ''}${BLE.hrDevice ? `<span class="hr">${icon('heart')} <span class="hrLive">${BLE.hr || '–'}</span> bpm</span>` : ''}</div>
+      <div class="row muted sm wstats">${vol > 0 ? `<span>${icon('weight')} ${fmtNum(vol)} ${U()}</span>` : ''}<span>${icon('check')} ${done} sets</span>${a.readiness != null ? `<span>${icon('heart-rate-monitor')} readiness ${a.readiness}</span>` : ''}</div>
       ${a.exercises.map((e, i) => this.exCard(e, i, a)).join('')}
       <button class="btn wide primary-ghost" data-a="addExercise">${icon('plus')} Add exercise</button>
       <button class="btn wide danger-ghost" data-a="discardWorkout">${icon('trash')} Discard workout</button>
@@ -307,7 +272,7 @@ const UI = {
       <div class="row-between"><button class="ex-title" data-a="exDetail" data-id="${e.exId}">${esc(ex.name)}</button>
         <button class="icon-btn" data-a="exMenu" data-i="${i}" aria-label="Exercise options">${icon('dots-vertical')}</button></div>
       ${inSS ? `<div class="ss-tag sm">${icon('link')} Superset</div>` : ''}
-      <div class="ex-target sm"><span>${icon('target')} ${esc(targetText(ex, e.target || Coach.defaultTarget(ex)))}${ex.type !== 'dist' && +e.rest ? ` · rest ${fmtDur(e.rest)}` : ''}</span>${ex.type === 'hang' ? `<button class="link sm" data-a="hangTimer" data-i="${i}">${icon('clock-play')} Timer</button>` : ''}<button class="link sm" data-a="toggleHow" data-i="${i}" aria-expanded="${!!e.showHow}">${icon('info-circle')} ${e.showHow ? 'Hide' : 'How to'}</button></div>
+      <div class="ex-target sm"><span>${icon('target')} ${esc(targetText(ex, e.target || Coach.defaultTarget(ex)))}${ex.type !== 'dist' && +e.rest ? ` · rest ${fmtDur(e.rest)}` : ''}</span>${ex.type === 'hang' ? `<button class="link sm" data-a="hangTimer" data-i="${i}">${icon('clock-play')} Timer</button>` : ''}${ex.equipment === 'barbell' && ex.type === 'wr' ? `<button class="link sm" data-a="plates" data-i="${i}">${icon('circle-dot')} Plates</button>` : ''}<button class="link sm" data-a="toggleHow" data-i="${i}" aria-expanded="${!!e.showHow}">${icon('info-circle')} ${e.showHow ? 'Hide' : 'How to'}</button></div>
       ${e.showHow ? (() => { const h = howTo(ex); return `<div class="howto sm"><p>${esc(h.steps)}</p><p class="muted">${icon('bulb')} ${esc(h.tip)}</p><p class="muted">${esc(trackingText(ex))}</p></div>`; })() : ''}
       ${e.showNotes || e.notes ? `<textarea class="notes" data-f="enotes" data-i="${i}" placeholder="Notes: seat height, grip, cues">${esc(e.notes)}</textarea>` : ''}
       <div class="coach ${sug.kind}">
@@ -316,13 +281,11 @@ const UI = {
         <div class="coach-btns">${sug.sets && sug.sets.length && sug.kind !== 'new' ? `<button class="btn sm" data-a="applySug" data-i="${i}">${icon('wand')} Apply</button>` : ''}
         ${sug.nextEx ? `<button class="btn sm" data-a="swapEx" data-i="${i}" data-id="${sug.nextEx}">${icon('arrow-up-right')} Switch to ${esc(Store.ex(sug.nextEx).name)}</button>` : ''}</div>
       </div>
-      ${ex.type === 'climb' ? quickClimbPad(ex, e, i) : ''}
       <div class="set-row head cols-${cols.length} ty-${ex.type}"><span>Set</span><span>Previous</span>${cols.map(c => `<span>${colLabel(c, ex)}</span>`).join('')}<span>${icon('check')}</span></div>
       ${rows}
       <div class="row-between ex-foot">
         <button class="btn sm" data-a="addSet" data-i="${i}">${icon('plus')} Set</button>
         <button class="btn sm ghost" data-a="removeSet" data-i="${i}">${icon('minus')} Set</button>
-        ${['wr', 'wbw', 'bw'].includes(ex.type) ? `<button class="btn sm ghost" data-a="countReps" data-i="${i}" aria-label="Count reps with camera">${icon('camera')}</button>` : ''}
         ${ex.type !== 'dist' ? `<label class="rest-sel sm">${icon('clock')}<select data-f="rest" data-i="${i}">${[0, 30, 45, 60, 90, 120, 150, 180, 240, 300].map(v => `<option value="${v}" ${+e.rest === v ? 'selected' : ''}>${v ? fmtDur(v) : 'Off'}</option>`).join('')}</select></label>` : ''}
       </div></div>`;
   },
@@ -374,8 +337,7 @@ const UI = {
       exercises: a.exercises.map(e => ({ exId: e.exId, target: e.target, notes: e.notes, ss: e.ss, rest: e.rest, sets: e.sets.filter(s => s.done).map(({ p, ...s }) => s) })).filter(e => e.sets.length) };
     const prs = findPRs(w);
     w.prs = prs.length; w.u = Date.now();
-    if (a.hr && a.hr.length > 3) { const v = a.hr.map(x => x[1]); w.hr = { avg: Math.round(v.reduce((p, q) => p + q, 0) / v.length), max: Math.max(...v), src: 'strap' }; }
-    else if (HC.on) HC.workoutHR(w.start, w.end).then(hr => { if (hr) { w.hr = hr; Store.save(); } });
+    if (HC.on) HC.workoutHR(w.start, w.end).then(hr => { if (hr) { w.hr = hr; Store.save(); } });
     Store.data.workouts.push(w); Store.data.active = null; Store.save(true);
     this.restEnd = 0; Notify.cancel(REST_NOTIF);
     this.stack = []; this.render();
@@ -442,7 +404,7 @@ const UI = {
         <div class="card"><div class="row-between"><b>${esc(ex.name)}</b><span>
           <button class="icon-btn" data-a="rMove" data-i="${i}" data-v="-1" aria-label="Move up">${icon('arrow-up')}</button>
           <button class="icon-btn" data-a="rRemove" data-i="${i}" aria-label="Remove">${icon('x')}</button></span></div>
-          ${none ? '<div class="sm muted">The coach sets distance and grade targets from your history.</div>' : `<div class="grid3 small-inputs">
+          ${none ? '<div class="sm muted">The coach sets distance and session-time targets from your history.</div>' : `<div class="grid3 small-inputs">
             <label>Sets<input inputmode="numeric" data-rf="sets" data-i="${i}" value="${e.sets}"></label>
             <label>${isT ? 'Min sec' : 'Min reps'}<input inputmode="numeric" data-rf="repMin" data-i="${i}" value="${e.repMin}"></label>
             <label>${isT ? 'Max sec' : 'Max reps'}<input inputmode="numeric" data-rf="repMax" data-i="${i}" value="${e.repMax}"></label></div>
@@ -460,7 +422,7 @@ const UI = {
       const t = e.target.closest('[data-a]'); if (!t) return;
       const fn = Actions[t.dataset.a]; if (!fn) return;
       e.preventDefault();
-      const fail = err => { ErrorLog.add('action:' + t.dataset.a, err && err.message, err && err.stack); toast('Something went wrong. It was saved to the error log.'); };
+      const fail = err => { ErrorLog.add('action:' + t.dataset.a, err && err.message, err && err.stack); toast('Something went wrong. Try again.'); };
       try { const r = fn.call(this, t, t.dataset); if (r && r.catch) r.catch(fail); } catch (err) { fail(err); }
     });
     document.addEventListener('change', e => {
@@ -480,12 +442,9 @@ const UI = {
       if (ds.f === 'wname') a.name = v;
       else if (ds.f === 'enotes') a.exercises[i].notes = v;
       else if (ds.f === 'rest') a.exercises[i].rest = +v;
-      else if (ds.f === 'sent') a.exercises[i].sets[j].sent = v;
-      else if (ds.f === 'st') { const st = a.exercises[i].sets[j]; st.st = v; st.sent = v !== '' && !/^p\d/.test(v); }
       else if (ds.f === 'edge') a.exercises[i].sets[j].edge = v === 'jug' || v === '' ? v : +v;
-      else if (['w', 'r', 'rpe', 't', 'd', 'g', 'a', 'ang', 'grip'].includes(ds.f)) a.exercises[i].sets[j][ds.f] = ds.f === 'g' ? v : (ds.f === 't' && ds.fmt === 'mmss' ? (v.includes(':') ? parseDur(v) : v) : v);
+      else if (['w', 'r', 'rpe', 't', 'd', 'grip'].includes(ds.f)) a.exercises[i].sets[j][ds.f] = ds.f === 't' && ds.fmt === 'mmss' ? (v.includes(':') ? parseDur(v) : v) : v;
       Store.save();
-      if (isChange && ds.f === 'g') this.refreshSheet();
     }
     if (ds.f === 'discq' && this.top()) { this.disc = { ...(this.disc || { grp: 'all' }), q: v }; const el = $('#discList'); if (el) el.innerHTML = this.discList(this.top().discKey); }
     if ((ds.f === 'pickdisc' || ds.f === 'pickmus') && this.pick) { if (ds.f === 'pickdisc') { this.pick.disc = v; this.pick.grp = 'all'; } else this.pick.muscle = v; const el = $('#pickList'); if (el) el.innerHTML = this.pickList(); }
@@ -540,32 +499,25 @@ function routineGroups(d) {
 }
 
 function setColumns(ex) {
-  return { wr: ['w', 'r', 'rpe'], wbw: ['w', 'r', 'rpe'], bw: ['r', 'rpe'], dur: ['t'], wdur: ['w', 't'], hang: ['edge', 'grip', 'w', 't'], dist: ['d', 'tt'], climb: ['g', 'a', 'st', 'ang'] }[ex.type] || ['w', 'r'];
+  return { wr: ['w', 'r', 'rpe'], wbw: ['w', 'r', 'rpe'], bw: ['r', 'rpe'], dur: ['t'], wdur: ['w', 't'], hang: ['edge', 'grip', 'w', 't'], dist: ['d', 'tt'], climb: ['tt'] }[ex.type] || ['w', 'r'];
 }
 function colLabel(c, ex) {
   const added = ex.type === 'wbw' || ex.type === 'hang' || (ex.type === 'wdur' && !Climb.LIFT.includes(ex.id));
-  return { w: added ? '+' + U() : U(), r: 'Reps', rpe: 'RPE', t: 'Sec', d: 'km', tt: 'Time', g: 'Grade', a: 'Tries', sent: 'Sent', st: 'Result', ang: 'Wall', edge: 'mm', grip: 'Grip' }[c];
+  return { w: added ? '+' + U() : U(), r: 'Reps', rpe: 'RPE', t: 'Sec', d: 'km', tt: 'Time', edge: 'mm', grip: 'Grip' }[c];
 }
 function setInput(ex, c, s, i, j) {
   const p = s.p || {};
-  if (c === 'sent') return `<label class="sent"><input type="checkbox" data-f="sent" data-i="${i}" data-j="${j}" ${s.sent ? 'checked' : ''} aria-label="Sent"></label>`;
-  if (c === 'g') {
-    const scale = Climb.grades(Climb.cat(ex)), opts = s.g && !scale.includes(s.g) ? [s.g, ...scale] : scale;
-    return `<select data-f="g" data-i="${i}" data-j="${j}" aria-label="Grade"><option value="">${esc(p.g || '–')}</option>${opts.map(g => `<option ${s.g === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>`;
-  }
-  if (c === 'st') { const cur = s.st != null ? s.st : (s.sent ? 'sent' : ''); return `<select data-f="st" data-i="${i}" data-j="${j}" aria-label="Result">${CLIMB_RESULTS.filter(r => r[0] !== 'onsight' || Climb.cat(ex) === 'route').map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`; }
   if (c === 'edge') { const cur = s.edge != null && s.edge !== '' ? String(s.edge) : ''; return `<select data-f="edge" data-i="${i}" data-j="${j}" aria-label="Edge depth"><option value="">${p.edge ? esc(String(p.edge === 'jug' ? 'Jug' : p.edge)) : '–'}</option>${[...Climb.EDGES.map(String), 'jug'].map(v => `<option value="${v}" ${cur === v ? 'selected' : ''}>${v === 'jug' ? 'Jug' : v}</option>`).join('')}</select>`; }
   if (c === 'grip') return `<select data-f="grip" data-i="${i}" data-j="${j}" aria-label="Grip"><option value="">${esc(p.grip ? (Climb.GRIPS.find(g => g[0] === p.grip) || [0, 0, p.grip])[2] : 'Grip')}</option>${Climb.GRIPS.map(([v, , sh]) => `<option value="${v}" ${s.grip === v ? 'selected' : ''}>${sh}</option>`).join('')}</select>`;
-  if (c === 'ang') return `<select data-f="ang" data-i="${i}" data-j="${j}" aria-label="Wall angle">${CLIMB_ANGLES.map(([v, l]) => `<option value="${v}" ${(s.ang || '') === v ? 'selected' : ''}>${v ? l : '–'}</option>`).join('')}</select>`;
   if (c === 'tt') return `<input inputmode="numeric" data-f="t" data-fmt="mmss" data-i="${i}" data-j="${j}" value="${s.t !== '' ? fmtDur(s.t) : ''}" placeholder="${p.t ? fmtDur(p.t) : 'mm:ss'}" aria-label="Time">`;
   const ph = c === 'w' ? fmtW(p.w) : (p[c] != null ? p[c] : '');
-  const mode = c === 'r' || c === 't' || c === 'a' ? 'numeric' : 'decimal';
+  const mode = c === 'r' || c === 't' ? 'numeric' : 'decimal';
   return `<input inputmode="${mode}" data-f="${c}" data-i="${i}" data-j="${j}" value="${esc(s[c] == null ? '' : s[c])}" placeholder="${esc(ph === '' ? (c === 'rpe' ? '' : '–') : ph)}" aria-label="${colLabel(c, ex)}">`;
 }
 function prevText(ex, s) {
   if (ex.type === 'dist') return `${s.d || 0}km ${fmtDur(s.t)}`;
   if (ex.type === 'dur') return `${s.t}s`;
-  if (ex.type === 'climb') return `${s.g || '?'}${s.sent ? (s.st === 'flash' || s.st === 'onsight' ? ' ⚡' : ' ✓') : ''}`;
+  if (ex.type === 'climb') return +s.t ? fmtDur(s.t) : '✓';
   if (ex.type === 'hang') return `${s.edge ? (s.edge === 'jug' ? 'jug' : s.edge + 'mm') : ''}${s.grip ? ' ' + (Climb.GRIPS.find(g => g[0] === s.grip) || [0, 0, s.grip])[2] : ''} ${+s.w ? (+s.w > 0 ? '+' : '') + fmtW(s.w) : 'BW'} ${s.t || 0}s`.trim();
   if (ex.type === 'wdur') return `${Climb.LIFT.includes(ex.id) ? fmtW(s.w) : (+s.w ? '+' + fmtW(s.w) : 'BW')} ${s.t || 0}s`;
   if (ex.type === 'bw') return `${s.r}`;
@@ -592,22 +544,6 @@ function readinessScore(c) {
   if (c.sleepAvg != null) s -= c.sleepAvg < 5.5 ? 6 : c.sleepAvg < 6.5 ? 3 : 0;
   return Math.max(0, Math.min(100, Math.round(s)));
 }
-// One-tap climb logging: pick how it went once, then tap a grade per climb
-const QUICK_RESULTS = [['flash', 'Flash', 'bolt'], ['sent', 'Sent', 'check'], ['p50', 'Fell', 'arrow-down']];
-function quickGrades(ex) {
-  const cat = Climb.cat(ex), list = Climb.grades(cat).filter(g => Climb.value(g, cat) >= 0);
-  const st = Climb.stats(cat, 120), base = st && st.max != null ? Climb.label(st.max, cat) : (cat === 'boulder' ? Climb.label(3, cat) : Climb.label(Climb.value('5.10a', 'route'), cat));
-  const k = Math.max(0, list.indexOf(base)), from = Math.max(0, Math.min(k - 4, list.length - 8));
-  return list.slice(from, from + 8);
-}
-function quickClimbPad(ex, e, i) {
-  const qr = e.qr || 'sent', logged = e.sets.filter(s => s.done && s.g);
-  return `<div class="qpad"><div class="qpad-head sm"><b>Quick log</b><span class="muted">${logged.length ? `${logged.length} logged · tap a grade for each climb` : 'Pick how it went, then tap the grade'}</span></div>
-    <div class="seg">${QUICK_RESULTS.map(([v, l, ic]) => `<button class="seg-btn ${qr === v ? 'on' : ''}" data-a="quickRes" data-i="${i}" data-id="${v}" aria-pressed="${qr === v}">${icon(ic)} ${l}</button>`).join('')}</div>
-    <div class="qgrades">${quickGrades(ex).map(g => `<button class="qgrade" data-a="quickClimb" data-i="${i}" data-id="${esc(g)}">${esc(g)}</button>`).join('')}</div>
-    ${logged.length ? `<button class="link sm" data-a="quickUndo" data-i="${i}">${icon('arrow-back-up')} Undo last</button>` : ''}</div>`;
-}
-
 function readinessLabel(s) { return s >= 85 ? 'Primed. A good day to push for PRs.' : s >= 65 ? 'Good to train as planned.' : s >= 45 ? 'A bit flat. Stick to the plan, no heroics.' : 'Low. The coach will lighten today\'s targets.'; }
 
 function warmupSets(work) {
@@ -638,13 +574,7 @@ function findPRs(w) {
       if (me1 > b.e1 + 0.01) out.push({ ex: ex.name, what: 'Best est. 1RM', val: Math.round(me1) + ' ' + U() });
     } else if (ex.type === 'bw' && mr > b.r) out.push({ ex: ex.name, what: 'Most reps', val: mr });
     else if (ex.type === 'wdur') { if (mw > b.w && sets.some(s => (+s.w || 0) === mw && (+s.t || 0) >= 5)) out.push({ ex: ex.name, what: 'Heaviest hold', val: fmtW(mw) + ' ' + U() }); }
-    else if (ex.type === 'climb') {
-      const cat = Climb.cat(ex), val = s => (s.sent ? Climb.value(s.g, cat) : null);
-      const before = Math.max(-9, ...Store.sessions(e.exId, 200).filter(h => h.workoutId !== w.id).flatMap(h => h.sets.map(val)).filter(v => v != null));
-      const now = Math.max(-9, ...sets.map(val).filter(v => v != null));
-      if (now > before && before > -9) out.push({ ex: ex.name, what: 'Hardest send', val: Climb.label(now, cat) });
-    }
-    else if (ex.type === 'dur') { const mt = Math.max(0, ...sets.map(s => +s.t || 0)); if (mt > b.t) out.push({ ex: ex.name, what: 'Longest', val: fmtDur(mt) }); }
+    else if (ex.type === 'dur' || ex.type === 'climb') { const mt = Math.max(0, ...sets.map(s => +s.t || 0)); if (mt > b.t) out.push({ ex: ex.name, what: 'Longest', val: fmtDur(mt) }); }
     else if (ex.type === 'dist') { const s = sets[0]; if (s && +s.d > b.d) out.push({ ex: ex.name, what: 'Longest distance', val: s.d + ' km' }); if (s && +s.d >= 1 && s.t / s.d < b.pace) out.push({ ex: ex.name, what: 'Best pace', val: fmtPace(s.t / s.d) }); }
   }
   return out;
@@ -674,22 +604,6 @@ function convertUnits(from, to) {
   if (to === 'lb') { s.bar = 45; s.plates = [45, 35, 25, 10, 5, 2.5]; } else { s.bar = 20; s.plates = [25, 20, 15, 10, 5, 2.5, 1.25]; }
   toast(`Converted to ${to}`);
 }
-function heatmap(ws) {
-  const days = {}; ws.forEach(w => { const k = new Date(w.start).toDateString(); days[k] = (days[k] || 0) + 1; });
-  const weeks = 16, start = startOfWeek() - (weeks - 1) * 7 * 864e5, L = 18, T = 14;
-  let cells = '', lastMonth = -1;
-  ['M', '', 'W', '', 'F', '', 'S'].forEach((d, r) => { if (d) cells += `<text x="0" y="${T + r * 19 + 11}" class="axis">${d}</text>`; });
-  for (let c = 0; c < weeks; c++) {
-    const m = new Date(start + c * 7 * 864e5).getMonth();
-    if (m !== lastMonth) { cells += `<text x="${L + c * 19}" y="10" class="axis">${new Date(start + c * 7 * 864e5).toLocaleDateString(undefined, { month: 'short' })}</text>`; lastMonth = m; }
-    for (let r = 0; r < 7; r++) {
-      const t = start + (c * 7 + r) * 864e5; if (t > Date.now()) continue;
-      const n = days[new Date(t).toDateString()] || 0;
-      cells += `<rect x="${L + c * 19}" y="${T + r * 19}" width="15" height="15" rx="3" class="hm${Math.min(n, 2)}"><title>${fmtDate(t)}: ${n} workout(s)</title></rect>`;
-    }
-  }
-  return `<svg viewBox="0 0 ${L + weeks * 19} ${T + 7 * 19}" class="chart heat" role="img" aria-label="Workout calendar, last ${weeks} weeks">${cells}</svg>`;
-}
 function historyCard(w) {
   const mins = Math.round(((w.end || w.start) - w.start) / 60000);
   return `<button class="card hist" data-a="workoutDetail" data-id="${w.id}">
@@ -701,7 +615,7 @@ function summaryBody(w, prs) {
   const mins = Math.round((w.end - w.start) / 60000);
   const sets = w.exercises.reduce((s, e) => s + e.sets.length, 0);
   return `<div class="celebrate">${icon('trophy')}<h2>Nice work</h2><div class="muted">${esc(w.name)} · ${fmtDate(w.start)}</div></div>
-    <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${mins} min</b></div>${workoutVolume(w) > 0 ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div>` : `<div class="stat"><div class="muted sm">${workoutStat(w).icon === 'mountain' ? 'Climbs' : 'Result'}</div><b class="sm">${esc(workoutStat(w).text)}</b></div>`}<div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div></div>
+    <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${mins} min</b></div>${workoutVolume(w) > 0 ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div>` : `<div class="stat"><div class="muted sm">Result</div><b class="sm">${esc(workoutStat(w).text)}</b></div>`}<div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div></div>
     ${w.badges && w.badges.length ? `<div class="card accent-card col"><b>${icon('award')} Achievement${w.badges.length > 1 ? 's' : ''} unlocked</b><div class="sm">${w.badges.map(esc).join(' · ')}</div></div>` : ''}
     ${prs.length ? `<div class="card"><b>${icon('trophy')} New records</b>${prs.map(p => `<div class="li static"><span>${esc(p.ex)}<span class="sm muted"> · ${p.what}</span></span><b>${esc(p.val)}</b></div>`).join('')}</div>` : ''}
     <div class="card"><b>${icon('sparkles')} Next session plan</b>${w.exercises.map(e => { const s = Coach.suggest(e.exId, e.target); return `<div class="li static col"><span><b>${esc(Store.ex(e.exId).name)}</b>: ${esc(s.title)}</span><span class="sm muted">${esc(s.text)}</span></div>`; }).join('')}</div>
@@ -736,6 +650,14 @@ const TIMER_PRESETS = {
     how: ['Agree on intensity with your partner.', 'Roll for the round time. Tap early, tap often.', 'Rest and switch partners during the break.'],
     moves: [] }
 };
+// The three timer tiles on Train, each with its presets
+const TIMER_GROUPS = {
+  intervals: { name: 'Intervals', icon: 'flame', desc: 'HIIT, Tabata, EMOM, AMRAP', list: ['hiit', 'tabata', 'emom', 'amrap'] },
+  rounds: { name: 'Rounds', icon: 'karate', desc: 'Boxing, BJJ', list: ['boxing', 'bjj'] },
+  hang: { name: 'Hangboard', icon: 'hand-grab', desc: 'Max hangs, repeaters', list: ['maxhang', 'repeaters', 'abrahang'] }
+};
+// Disciplines with their own tile on Train (the rest are still in the exercise library)
+const TRAIN_DISCIPLINES = ['strength', 'calisthenics', 'cardio', 'climbing'];
 function timerSummary(c) {
   const reps = c.reps || 1;
   if (reps > 1) { const set = reps * c.work + (reps - 1) * c.rest, total = c.rounds * set + Math.max(0, c.rounds - 1) * (c.setRest || 0) + (c.prep || 0); return `${c.rounds} sets × ${reps} hangs (${c.work}s on / ${c.rest}s off) · ${fmtDur(c.setRest || 0)} between sets · total ${fmtDur(total)}`; }

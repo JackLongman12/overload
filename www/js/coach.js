@@ -77,7 +77,7 @@ const Coach = {
         s.sets = s.sets.slice(0, Math.max(1, s.sets.length - 1));
         const loaded = ex.type === 'wr' || ex.type === 'wbw' || ex.type === 'wdur';
         if (loaded) s.sets = s.sets.map(x => ({ ...x, w: x.w ? this.roundW(x.w * 0.92, ex) : x.w }));
-        s.text += ex.type === 'climb' ? ` Readiness is low (${ready}), so the hardest attempt is dropped today.`
+        s.text += ex.type === 'climb' ? ` Readiness is low (${ready}), so keep today's session short and easy.`
           : ` Readiness is low (${ready}), so today is lighter: one set fewer${loaded ? ' and about 8% less weight' : ''}.`;
         s.tag = 'light day';
       } else if (ready >= 85 && s.kind === 'reps') {
@@ -207,18 +207,7 @@ const Coach = {
     return { kind: 'pace', title: 'Same distance, a bit faster', tag: '-2% time', text: `Keep ${last.d} km and aim for ${fmtDur(tt)}, a 2% faster pace (${fmtPace(tt / last.d)}).`, sets: [{ d: last.d, t: tt }] };
   },
 
-  suggestClimb(ex, hist) {
-    if (typeof Climb !== 'undefined') return Climb.suggest(ex, hist);
-    if (!hist.length) return { kind: 'new', title: 'First session', tag: 'new', text: 'Log each climb with its grade and whether you sent it. The coach will pick your next project grade.', sets: [{ g: '', a: 1, sent: false }] };
-    const all = hist.slice(0, 4).flatMap(h => h.sets).filter(s => s.sent && s.g);
-    const scale = ex.id === 'bouldering' ? CLIMB_GRADES.boulder : CLIMB_GRADES.route;
-    const idx = all.map(s => scale.indexOf(s.g)).filter(i => i >= 0);
-    if (!idx.length) return { kind: 'climb', title: 'Keep sending', tag: 'climb', text: 'Log sends with a grade so the coach can track your level.', sets: [{ g: '', a: 1 }] };
-    const top = Math.max(...idx);
-    const countTop = idx.filter(i => i === top).length;
-    if (countTop >= 3 && scale[top + 1]) return { kind: 'climb', title: `Project ${scale[top + 1]}`, tag: 'grade up', text: `You've sent ${scale[top]} ${countTop} times recently. Start projecting ${scale[top + 1]}, and keep ${scale[top]} for volume.`, sets: [{ g: scale[top + 1], a: 1 }] };
-    return { kind: 'climb', title: `Consolidate ${scale[top]}`, tag: 'volume', text: `Send ${scale[top]} ${3 - countTop} more time(s) to unlock the next grade. Use ${scale[Math.max(0, top - 1)]} for mileage.`, sets: [{ g: scale[top], a: 1 }] };
-  },
+  suggestClimb(ex, hist) { return Climb.suggest(ex, hist); },
 
   variations(ex) {
     return Store.allExercises().filter(e => e.id !== ex.id && e.muscle === ex.muscle && e.type === ex.type && e.compound === ex.compound && (typeof Plan === 'undefined' || Plan.available(e))).slice(0, 4);
@@ -267,15 +256,9 @@ const Coach = {
       const push = (vol.chest || 0) + (vol.shoulders || 0) * 0.5, pull = (vol.lats || 0) + (vol.upper_back || 0);
       if (push > 6 && pull < push * 0.7) out.push({ icon: 'scale', tone: 'warning', text: `Push volume (${Math.round(push)}) is well above pull (${Math.round(pull)}). Add rows or pull-ups to keep your shoulders healthy.` });
     }
-    // Climbing: load spikes, finger streaks, limiters and stuck projects
-    if (Climb.climbs(28).length) {
-      const lr = Climb.loadRatio(), fd = Climb.fingerDays();
-      if (lr && lr.ratio > 1.5) out.push({ icon: 'alert-triangle', tone: 'warning', text: `Climbing load is ${lr.ratio}x your 4-week average. Big jumps are when finger injuries happen, so keep the next sessions moderate.` });
-      if (fd >= 3) out.push({ icon: 'hand-stop', tone: 'warning', text: `${fd} days in a row on your fingers. Take a rest day: pulleys recover slower than muscles.` });
-      const pr = Climb.profile();
-      pr.advice.filter(a => a.tone !== 'info' || /harder on/.test(a.text)).slice(0, 2).forEach(a => out.push({ icon: a.tone === 'warn' ? 'target' : 'mountain', tone: a.tone === 'warn' ? 'accent' : 'success', text: a.text }));
-      ['boulder', 'route'].forEach(cat => { const p = Climb.projects(cat).find(x => x.sessions >= 3); if (p) out.push({ icon: 'flag', tone: 'accent', text: `${p.g} project: ${p.sessions} sessions, best high point ${Math.round(p.best * 100)}%. Try it first while fresh, and work it in sections.` }); });
-    }
+    // Fingers: climbing or hard finger training several days in a row
+    const fd = Climb.fingerDays();
+    if (fd >= 3) out.push({ icon: 'hand-stop', tone: 'warning', text: `${fd} days in a row on your fingers. Take a rest day: pulleys recover slower than muscles.` });
     const goal = Store.data.settings.weekGoal;
     const thisWeek = ws.filter(w => w.start > startOfWeek()).length;
     out.push({ icon: 'calendar', tone: thisWeek >= goal ? 'success' : 'accent', text: `${thisWeek} of ${goal} workouts this week.` + (thisWeek >= goal ? ' Goal reached.' : '') });

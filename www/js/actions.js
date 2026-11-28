@@ -27,11 +27,10 @@ const Actions = {
   ciMore() { this._ciOpen = !this._ciOpen; },
   ciMood(el, d) { this.ci.energy = +d.id; this._ciOpen = false; this.ciSave(); },
   // Automatic check-in from sleep, heart data and training, with energy assumed OK
-  autoCheckin() {
+  autoCheckin(quiet) {
     this.prepCheckin(false); this.ci.energy = 3; const c = { ...this.ci, auto: true, date: Date.now(), score: readinessScore(this.ci) };
-    Store.data.checkins.push(c); Store.save(true); toast(`Readiness ${c.score} (automatic). Tap Check in on Home to adjust.`);
+    Store.data.checkins.push(c); Store.save(true); if (!quiet) toast(`Readiness ${c.score}. Tap Redo on the Today card to adjust.`);
   },
-  ciSkip() { const next = this._afterCheckin; this._afterCheckin = null; this.closeSheet(); if (next) next(); },
 
   // ----- Routines
   newRoutine() { this.editRoutine(null); },
@@ -48,8 +47,10 @@ const Actions = {
   },
   rDelete() { if (!confirm('Delete this routine? Your workout history is kept.')) return; Store.tombstone(this.draft.id); Store.data.routines = Store.data.routines.filter(r => r.id !== this.draft.id); Store.save(true); this.closeSheet(); },
   programs() { this.openPrograms(); },
-  toggleBadges() { this._allBadges = !this._allBadges; this.render(); },
-  toggleIns() { this._allIns = !this._allIns; this.render(); },
+  badges() {
+    this.openSheet('badges', 'Achievements', () => { const u = Achievements.unlocked(), list = Achievements.LIST.filter(a => u.has(a[0])).concat(Achievements.LIST.filter(a => !u.has(a[0])));
+      return `<p class="sm muted">${u.size} of ${Achievements.LIST.length} earned.</p><div class="badges">${list.map(([id, name, desc]) => `<div class="badge ${u.has(id) ? 'on' : ''}">${icon(u.has(id) ? 'award' : 'lock')}<b>${esc(name)}</b><span>${esc(desc)}</span></div>`).join('')}</div>`; });
+  },
   watchDemo(el, d) { openExternal('https://www.youtube.com/results?search_query=' + encodeURIComponent(Store.ex(d.id).name + ' exercise proper form')); },
   progGoal(el, d) { this.progGoal = d.id; this.refreshSheet(); },
   addProgram(el, d) {
@@ -90,20 +91,6 @@ const Actions = {
   addSet(el, d) {
     const e = Store.data.active.exercises[+d.i], last = e.sets[e.sets.length - 1] || {};
     e.sets.push({ type: 'N', w: last.w || '', r: '', t: '', d: '', g: '', a: '', rpe: '', done: false, p: { ...(last.p || {}), w: last.w || (last.p || {}).w, r: last.r || (last.p || {}).r, t: last.t || (last.p || {}).t } });
-    Store.save(); this.refreshSheet();
-  },
-  quickRes(el, d) { Store.data.active.exercises[+d.i].qr = d.id; Store.save(); this.refreshSheet(); },
-  quickClimb(el, d) {
-    const e = Store.data.active.exercises[+d.i], st = e.qr || 'sent';
-    const set = { type: 'N', g: d.id, a: 1, st, sent: !/^p\d/.test(st), ang: '', w: '', r: '', t: '', d: '', rpe: '', done: true };
-    const k = e.sets.findIndex(s => !s.done && !s.g);
-    if (k >= 0) e.sets[k] = { ...e.sets[k], ...set }; else e.sets.push(set);
-    Store.save(); this.refreshSheet();
-    if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) { }
-  },
-  quickUndo(el, d) {
-    const e = Store.data.active.exercises[+d.i];
-    for (let k = e.sets.length - 1; k >= 0; k--) if (e.sets[k].done && e.sets[k].g) { e.sets.splice(k, 1); break; }
     Store.save(); this.refreshSheet();
   },
   removeSet(el, d) { const e = Store.data.active.exercises[+d.i]; if (e.sets.length) e.sets.pop(); Store.save(); this.refreshSheet(); },
@@ -173,7 +160,7 @@ const Actions = {
     // Replace the routines of an earlier climbing plan
     const old = Store.data.routines.filter(r => r.program && r.program.startsWith('My climbing plan'));
     old.forEach(r => Store.tombstone(r.id)); Store.data.routines = Store.data.routines.filter(r => !old.includes(r));
-    p.routines.forEach(([name, exs]) => Store.data.routines.push({ id: uid(), name, program: p.name, exercises: exs.map(([exId, sets, repMin, repMax]) => { const ex = Store.ex(exId); return { exId, sets, repMin, repMax, rest: ex.type === 'climb' ? 180 : ex.type === 'hang' ? 180 : repMax <= 8 ? 180 : Store.data.settings.rest }; }) }));
+    p.routines.forEach(([name, exs]) => Store.data.routines.push({ id: uid(), name, program: p.name, exercises: exs.map(([exId, sets, repMin, repMax]) => { const ex = Store.ex(exId); return { exId, sets, repMin, repMax, rest: ex.type === 'climb' ? 0 : ex.type === 'hang' ? 180 : repMax <= 8 ? 180 : Store.data.settings.rest }; }) }));
     Store.data.settings.climbPlan = { ...o, start: startOfWeek() };
     Store.save(true); this.closeSheet(); this.refreshSheet(); toast(`Plan started: ${p.routines.length} routines added to Home`);
   },
@@ -199,7 +186,6 @@ const Actions = {
   },
   toggleHow(el, d) { const e = Store.data.active.exercises[+d.i]; e.showHow = !e.showHow; Store.save(); this.refreshSheet(); },
   hideLogTips() { Store.data.settings.hideLogTips = true; Store.save(); this.refreshSheet(); },
-  climbDays(el, d) { this._climbDays = +d.id; this.refreshSheet(); },
   allExercises() { this.openLibrary(); },
   workoutDetail(el, d) { this.openWorkoutDetail(d.id); },
   repeatWorkout(el, d) {
@@ -212,6 +198,7 @@ const Actions = {
   discipline(el, d) { this.openDiscipline(d.id); },
   quickStart(el, d) { this.stack = []; this.beginWorkout(() => { this.newWorkout(Store.ex(d.id).name); Store.data.active.exercises.push(this.makeWorkoutEx(d.id)); Store.save(); this.refreshSheet(); }); },
   ladder(el, d) { this.openLadder(d.id); },
+  timerGroup(el, d) { this.openTimerGroup(d.id); },
   timerSetup(el, d) { this.openTimerSetup(d.id); },
   timerStart() { this.startTimer(); },
   timerPause() { Timer.pause(); },
@@ -219,6 +206,13 @@ const Actions = {
   timerRound() { Timer.amrapRounds++; this.refreshSheet(); },
   timerSave() { Timer.save(); this.stack = []; this.render(); this.renderSheets(); toast('Session saved to history'); },
   tool(el, d) { this.openTool(d.id); },
+  calculators() { this.openCalculators(); },
+  // Plate loading for a barbell exercise in the workout, filled in with its working weight
+  plates(el, d) {
+    const e = Store.data.active.exercises[+d.i], work = e.sets.filter(s => s.type !== 'W'), s = work.find(x => !x.done) || work[0] || {};
+    const w = +s.w || +(s.p || {}).w || 0;
+    this.openTool('plates', w ? { target: String(w) } : null);
+  },
 
   // ----- Body
   addMeasure() { this.openMeasure(); },
@@ -245,25 +239,6 @@ const Actions = {
   onboardDone() { Store.data.onboarded = true; Store.save(true); this.closeSheet(); },
   disclaimer() { this.openSheet('disclaimer', 'Health and safety', () => DISCLAIMER_HTML); },
   privacy() { const url = 'https://github.com/JackLongman12/overload/blob/main/PRIVACY.md'; const br = Plugin('Browser'); if (br) br.open({ url }); else window.open(url, '_blank'); },
-
-  // ----- AI rep counter
-  countReps(el, d) { this.openPose(+d.i); },
-  async aiInstall() {
-    this.aiBusy = 'Starting…'; this.refreshSheet();
-    try { await Pose.installPack(msg => { this.aiBusy = msg; const e = $('#aiBusy'); if (e) e.textContent = msg; }); this.aiBusy = null; this.refreshSheet(); }
-    catch (e) { this.aiBusy = null; this.aiErr = e.message; this.refreshSheet(); }
-  },
-  poseUse() {
-    const i = this.poseEx, a = Store.data.active, st = Pose.state;
-    if (!a || !st || !st.reps) return toast('No reps counted yet');
-    const e = a.exercises[i]; let s = e.sets.find(x => !x.done && x.type !== 'W') || e.sets.find(x => !x.done);
-    if (!s) { Actions.addSet.call(this, null, { i }); s = e.sets[e.sets.length - 1]; }
-    s.r = st.reps; Store.save();
-    Pose.stop(); this.closeSheet(); toast(st.reps + ' reps entered. Tap the check to complete the set.');
-  },
-  poseReset() { if (Pose.state) { Pose.state.reps = 0; Pose.state.phase = 'up'; Pose.state.cue = 'Start your set'; Pose.state.onUpdate(Pose.state); } },
-  async poseFlip() { Pose.facing = Pose.facing === 'user' ? 'environment' : 'user'; this.refreshSheet(); },
-  aiDelete() { const fs = Plugin('Filesystem'); if (fs) fs.rmdir({ path: 'ai', directory: 'DATA', recursive: true }).catch(() => { }); delete Store.data.settings.aiPack; Store.save(true); Pose.landmarker = null; toast('AI pack removed'); this.refreshSheet(); },
 
   // ----- Batch 3
   rDuplicate() {
@@ -303,7 +278,7 @@ const Actions = {
         <div class="card"><b>${esc(plan.name)}</b><div class="sm muted">${esc(plan.split)} split</div>
           ${plan.routines.map(r => `<div style="margin-top:10px"><b class="sm">${esc(r.name)}</b>${r.exercises.map(e => `<div class="sm muted">${esc(Store.ex(e.exId).name)}: ${e.sets} × ${e.repMin}–${e.repMax}</div>`).join('')}</div>`).join('')}</div>
         <button class="btn primary wide" data-a="builderAdd">${icon('plus')} Add this program</button>
-        <p class="sm muted">You can edit any routine afterwards. Tip: start a training block from Programs to add planned progression and a deload week.</p>`;
+        <p class="sm muted">You can edit any routine afterwards. Tip: start a training block from Plans to add planned progression and a deload week.</p>`;
     }, { mount: () => $$('[data-b]').forEach(el => el.addEventListener('change', () => { this.bopt[el.dataset.b] = /^\d+$/.test(el.value) ? +el.value : el.value; this.refreshSheet(); })) });
   },
   builderAdd() {
@@ -312,51 +287,12 @@ const Actions = {
     Store.save(true); this.stack = []; this.renderSheets(); this.nav('home'); toast(`Added ${p.routines.length} routines`);
   },
 
-  // ----- Error log
-  errorLog() {
-    this.openSheet('errors', 'Error log', () => {
-      const l = ErrorLog.list().slice().reverse();
-      return `<p class="sm muted">Errors are recorded on this phone only. If something breaks, share this log so it can be fixed.</p>
-        <div class="grid2"><button class="btn primary" data-a="errorShare">${icon('share')} Share log</button><button class="btn" data-a="errorClear">${icon('trash')} Clear</button></div>
-        ${l.length ? l.map(e => `<div class="card sm"><div class="row-between"><b>${esc(e.kind)}</b><span class="muted">${fmtDate(e.t, { day: 'numeric', month: 'short' })} ${fmtTime(e.t)}</span></div><div>${esc(e.msg)}</div>${e.stack ? `<details><summary>Details</summary><pre class="stack">${esc(e.stack)}</pre></details>` : ''}</div>`).join('') : '<div class="empty">No errors recorded.</div>'}`;
-    });
-  },
-  errorShare() { download(`gym-app-errors-${new Date().toISOString().slice(0, 10)}.txt`, ErrorLog.text()); },
-  errorClear() { ErrorLog.clear(); this.refreshSheet(); },
-
-  async watchCheck() { const r = await Companion.watchStatus(); this.watchMsg = !r ? 'Only available in the Android app' : r.count ? `Connected to ${r.name || 'your watch'}` : 'No watch connected'; this.refreshSheet(); },
   // ----- Devices
   devices() { this.openDevices(); },
   async hcConnect() { try { await HC.connect(); toast(HC.on ? 'Health Connect linked' : 'No permissions granted'); } catch (e) { toast(e.message); } this.refreshSheet(); },
   async hcPull() { toast('Reading from Health Connect…'); const h = await HC.pull(); toast(h ? `Updated${h.imported ? ', ' + h.imported + ' watch workout(s) added' : ''}` : 'Not linked'); this.refreshSheet(); },
   hcSettings() { if (HC.api) HC.api.openHealthConnectSettings().catch(() => { }); },
   hcDisconnect() { HC.disconnect(); this.refreshSheet(); toast('Unlinked. To fully revoke access, use Health Connect settings.'); },
-  async scaleScan() {
-    this.scale = { status: 'scanning', reading: null };
-    this.refreshSheet();
-    try {
-      await BLE.scanScale(r => {
-        if (!r) { if (this.scale.status === 'scanning') this.scale.status = 'timeout'; this.refreshSheet(); return; }
-        this.scale.reading = r;
-        if (r.stable) { this.scale.status = 'done'; BLE.stopScan(); buzz([80]); }
-        const el = $('#scaleLive'); if (el) el.textContent = fmtW(Store.data.settings.unit === 'lb' ? Math.round(r.kg / 0.45359237 * 10) / 10 : r.kg);
-        if (r.stable) this.refreshSheet();
-      });
-    } catch (e) { this.scale = { status: 'error', err: e.message }; this.refreshSheet(); }
-  },
-  scaleStop() { BLE.stopScan(); this.scale = null; this.refreshSheet(); },
-  scaleSave() {
-    const r = this.scale && this.scale.reading; if (!r) return;
-    const w = Store.data.settings.unit === 'lb' ? Math.round(r.kg / 0.45359237 * 10) / 10 : Math.round(r.kg * 10) / 10;
-    const m = { id: uid(), date: Date.now(), weight: w, source: r.model };
-    if (r.impedance) m.impedance = r.impedance;
-    Store.data.measurements.push(m); Store.data.settings.bodyweight = w; Store.save(true);
-    HC.saveWeight(w);
-    this.scale = null; this.refreshSheet(); toast('Weight saved: ' + w + ' ' + U());
-  },
-  async hrConnect() { try { toast('Looking for heart-rate monitors…'); await BLE.connectHR(); toast('Heart-rate monitor connected'); } catch (e) { toast(e.message || 'No device selected'); } },
-  hrDisconnect() { BLE.disconnectHR(true); },
-
   // ----- Account and sync
   account() { this.authMode = 'new'; this.authErr = ''; this.openAccount(); },
   async keyCreate() {
@@ -451,7 +387,6 @@ const Actions = {
   importCancel() { this.importResult = null; this.refreshSheet(); },
   async exportJSON() { toast('Preparing backup…'); download(`gym-app-backup-${new Date().toISOString().slice(0, 10)}.json`, await Store.exportJSON(), 'application/json'); this.render(); },
   exportStrong() { download(`gym-app-strong-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toStrongCSV(), 'text/csv'); },
-  exportHevy() { download(`gym-app-hevy-format-${new Date().toISOString().slice(0, 10)}.csv`, IO.toHevyCSV(), 'text/csv'); },
   wipeData() {
     if (!confirm('Delete ALL workouts, routines, measurements and photos from this phone? This can\'t be undone. Export a backup first.')) return;
     if (!confirm('Are you sure? Everything will be erased.')) return;

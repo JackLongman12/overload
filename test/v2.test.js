@@ -7,9 +7,9 @@ function hangs(app, exId, daysAgo, sets, target) {
   const t = Date.now() - daysAgo * DAY;
   app.Store.data.workouts.push({ id: app.uid(), name: 'Fingers', start: t, end: t + 1, exercises: [{ exId, target, sets: sets.map(([edge, grip, w, s]) => ({ type: 'N', edge, grip, w, t: s, done: true })) }] });
 }
-function climbs(app, exId, daysAgo, list, mins = 90) {
+function climbs(app, exId, daysAgo, secs) {
   const t = Date.now() - daysAgo * DAY;
-  app.Store.data.workouts.push({ id: app.uid(), name: 'Climb', start: t, end: t + mins * 60e3, exercises: [{ exId, sets: list.map(([g, st, a]) => ({ type: 'N', g, st, sent: !!st && !/^p\d/.test(st), a: a || 1, done: true })) }] });
+  app.Store.data.workouts.push({ id: app.uid(), name: 'Climb', start: t, end: t + secs * 1000, exercises: [{ exId, sets: [{ type: 'N', t: secs, done: true }] }] });
 }
 
 test('hangboard: keeps edge and grip, adds weight when every hang holds, smaller edge for minimum-edge', async () => {
@@ -38,30 +38,20 @@ test('hangboard: lighter when most hangs fall short; rest after 3 finger days', 
   assert.match(s.title, /Rest your fingers/);
 });
 
-test('climb load counts failed attempts by high point; projects and load ratio', async () => {
-  const app = await fresh();
-  const C = app.Climb;
-  assert.equal(C.climbLoad({ cat: 'boulder', v: 5, sent: true, a: 1, hp: 1 }), 8);
-  assert.equal(C.climbLoad({ cat: 'boulder', v: 5, sent: false, a: 2, hp: 0.5 }), 8);
-  for (let wk = 1; wk <= 4; wk++) climbs(app, 'bouldering', wk * 7 + 1, [['V4', 'sent'], ['V4', 'sent'], ['V3', 'flash']]);
-  climbs(app, 'bouldering', 1, [['V4', 'sent'], ['V5', 'p85', 4], ['V5', 'p50', 3], ['V6', 'p25', 2], ['V4', 'sent'], ['V4', 'sent'], ['V4', 'sent'], ['V4', 'sent']]);
-  const p = C.projects('boulder');
-  assert.equal(J(p.map(x => [x.g, x.tries, x.best])), J([['V5', 7, 0.85], ['V6', 2, 0.25]]));
-  const lr = C.loadRatio();
-  assert.ok(lr.ratio > 1.5, 'big jump flagged');
-  assert.equal(C.sessionSummary('boulder').pace > 0, true);
-});
-
-test('profile: finger strength vs grade gives the right limiter advice', async () => {
+test('finger strength: % of body weight per session, block lifts apart, pull-up 1RM', async () => {
   const app = await fresh();
   app.Store.data.settings.bodyweight = 70;
-  for (let i = 0; i < 3; i++) climbs(app, 'bouldering', 10 + i, [['V6', 'sent'], ['V6', 'sent'], ['V6', 'sent'], ['V5', 'sent'], ['V5', 'sent']]);
-  hangs(app, 'max_hang_added_weight', 3, [[20, 'half', 0, 10]]); // 100% body weight: weak fingers for V6
-  let pr = app.Climb.profile();
-  assert.ok(pr.advice.some(a => a.tone === 'warn' && /limiter/.test(a.text)));
-  hangs(app, 'max_hang_added_weight', 1, [[20, 'half', 50, 10]]); // 171%: strong fingers
-  pr = app.Climb.profile();
-  assert.ok(pr.advice.some(a => a.tone === 'good' && /technique/.test(a.text)));
+  hangs(app, 'max_hang_added_weight', 10, [[20, 'half', 0, 10]]);
+  hangs(app, 'max_hang_added_weight', 3, [[20, 'half', 14, 10], [20, 'half', 14, 3]]);
+  hangs(app, 'abrahang', 2, [[20, 'half', 30, 10]]); // easy hangs don't count as max strength
+  const t = Date.now() - DAY;
+  app.Store.data.workouts.push({ id: app.uid(), name: 'Block', start: t, end: t + 1, exercises: [{ exId: 'no_hang_block_lift', sets: [{ type: 'N', w: 35, t: 10, done: true }] }] });
+  assert.equal(J(app.Climb.hangTrend().map(p => p.y)), J([100, 120]));
+  const f = app.Climb.fingers();
+  assert.equal(f.hang.pct, 120);
+  assert.equal(f.lift.pct, 50);
+  session(app, 'pull_up_weighted', 1, [[35, 1]]);
+  assert.equal(app.Climb.pullPct(), 150);
 });
 
 test('climbing plan: days, beginner safety, and the coach follows the phase', async () => {
@@ -76,12 +66,13 @@ test('climbing plan: days, beginner safety, and the coach follows the phase', as
   assert.ok(adv.routines.flatMap(r => r[1].map(e => e[0])).includes('repeaters_7_3'));
   const valid = new Set(app.BUILTIN_EXERCISES.map(e => e.id));
   [beginner, adv].forEach(p => p.routines.forEach(r => r[1].forEach(e => assert.ok(valid.has(e[0]), e[0]))));
-  climbs(app, 'bouldering', 6, [['V3', 'sent'], ['V4', 'sent'], ['V4', 'sent']]);
+  climbs(app, 'bouldering', 6, 5400);
   app.Store.data.settings.climbPlan = { focus: 'boulder', days: 3, level: 'mid', hangboard: true, start: Date.now() - 5 * 7 * DAY };
   assert.equal(C.phase().name, 'Strength');
   const s = app.Coach.suggest('bouldering');
-  assert.match(s.title, /limit/);
-  assert.ok(s.sets.some(x => x.g === 'V5'));
+  assert.match(s.title, /Strength/);
+  assert.match(s.text, /Limit bouldering/);
+  assert.equal(s.sets[0].t, 5400);
 });
 
 test('recovery totals sets per muscle per workout and skips mobility', async () => {

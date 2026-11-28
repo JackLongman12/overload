@@ -69,10 +69,9 @@ const Timer = {
 Object.assign(UI, {
   beginWorkout(fn) {
     if (Store.data.active) { if (!confirm('You have a workout in progress. Discard it and start a new one?')) return this.openWorkout(); this.discard(); }
-    if (!Store.latestCheckin()) {
-      if (Store.data.settings.autoCheckin) { this.autoCheckin(); return fn(); }
-      this._afterCheckin = fn; this.openCheckin(true);
-    } else fn();
+    // Readiness fills in by itself (sleep, heart data, recent training). Redo it from the Today card.
+    if (!Store.latestCheckin()) Actions.autoCheckin.call(this, true);
+    fn();
   },
 
   openCheckin(beforeWorkout) {
@@ -115,7 +114,7 @@ Object.assign(UI, {
         : `<div class="card ci-auto sm">${icon('circle-check')} <b>Filled in for you</b><div class="muted">${esc(this._ciAutoNote)}</div>${HC.on ? '' : `<div class="muted">Sleep fills in by itself if you <button class="link sm" data-a="devices">link Health Connect</button> (Samsung Health, Sleep as Android, watches).</div>`}</div>`}
       <div class="ci-mood-q">One tap: how is your energy today?</div>
       <div class="moods">${moods.map(([v, ic, l]) => `<button class="mood ${c.energy === v ? 'on' : ''}" data-a="ciMood" data-id="${v}">${icon(ic)}<span>${l}</span></button>`).join('')}</div>
-      <p class="sm muted center">Tapping saves${beforeWorkout ? ' and starts your workout' : ''}. Your readiness score is worked out from everything above.</p>
+      <p class="sm muted center">Tapping saves. Your readiness score is worked out from everything above.</p>
       <details class="ci-more" ${this._ciOpen ? 'open' : ''}><summary data-a="ciMore">Adjust the details</summary>
         ${filled.includes('sleep') ? '' : seg('sleep', 'Sleep last night', [[4, '≤4 h'], [5, '5 h'], [6, '6 h'], [7, '7 h'], [8, '8 h'], [9, '9+ h']])}
         ${seg('quality', 'Sleep quality' + (filled.includes('quality') ? ' (from your sleep stages)' : ''), [[1, 'Bad'], [2, 'Poor'], [3, 'OK'], [4, 'Good'], [5, 'Great']])}
@@ -123,8 +122,7 @@ Object.assign(UI, {
         ${seg('stress', 'Stress', [[1, 'Calm'], [2, 'Low'], [3, 'Some'], [4, 'High'], [5, 'Very']])}
         ${filled.includes('sleep') ? `<div class="sm muted">Sleep: ${c.sleep} h from your sleep app.</div>` : ''}
       </details>
-      ${beforeWorkout ? '<button class="btn wide ghost" data-a="ciSkip">Skip for today</button>' : ''}
-      <label class="field row sm"><input type="checkbox" data-setting="autoCheckin" ${Store.data.settings.autoCheckin ? 'checked' : ''}> Don't ask before workouts. Use my sleep and heart data, and assume energy is OK.</label>`;
+`;
   },
 
   openWelcome() {
@@ -132,44 +130,16 @@ Object.assign(UI, {
       <div class="card list">
         <div class="li static col"><b>${icon('sparkles')} A coach that adapts</b><span class="sm muted">It suggests when to add reps, sets or weight, and when to back off.</span></div>
         <div class="li static col"><b>${icon('lock')} Private by design</b><span class="sm muted">Your workouts stay on this phone. Nothing is uploaded.</span></div>
-        <div class="li static col"><b>${icon('cloud')} Optional encrypted sync</b><span class="sm muted">Create an account in You, Account and sync to back up and use several phones. Only you can read the data.</span></div>
-        <div class="li static col"><b>${icon('file-import')} Bring your history</b><span class="sm muted">Import from Hevy, Strong, FitNotes, Strava or Garmin in You, Import.</span></div>
+        <div class="li static col"><b>${icon('cloud')} Optional encrypted sync</b><span class="sm muted">Turn it on in You, Backup and sync to back up and use several phones. Only you can read the data.</span></div>
+        <div class="li static col"><b>${icon('file-import')} Bring your history</b><span class="sm muted">Import from Hevy, Strong, FitNotes, Strava or Garmin in You, Backup and sync.</span></div>
       </div>
       ${DISCLAIMER_HTML}
       <button class="btn primary wide" data-a="onboardDone">I understand, let's train</button>`);
   },
 
-  openPose(i) {
-    this.poseEx = i; this.aiErr = null;
-    const e = Store.data.active.exercises[i], ex = Store.ex(e.exId), mode = Pose.modeFor(ex);
-    this.openSheet('pose', 'Rep counter', () => {
-      if (Pose.isNative() && Store.data.settings.aiPack !== AI_PACK.version) {
-        return `<div class="celebrate">${icon('camera')}<h2>Count reps with the camera</h2></div>
-          <div class="card sm">Gym App uses an AI pose model that runs entirely on your phone. Video is never saved or uploaded. It counts reps and checks squat depth and push-up hip position.</div>
-          <div class="card sm">It needs a one-time download of about ${AI_PACK.sizeMB} MB (Google's MediaPipe engine and pose model). Each file is checked against a fingerprint built into the app before it's used. Wi-Fi recommended.</div>
-          ${this.aiErr ? `<div class="card warn-card sm">${esc(this.aiErr)}</div>` : ''}
-          ${this.aiBusy ? `<div class="center sm" id="aiBusy">${esc(this.aiBusy)}</div>` : `<button class="btn primary wide" data-a="aiInstall">${icon('download')} Download AI pack</button>`}`;
-      }
-      return `<div class="pose-wrap"><video id="poseVideo" playsinline muted></video><canvas id="poseCanvas"></canvas>
-          <div class="pose-count"><span id="poseReps">0</span><small>reps</small></div><div class="pose-angle">${esc(mode.label)} <span id="poseAngle">–</span></div></div>
-        <div class="card center" id="poseCue">Loading the AI model…</div>
-        <div class="grid3"><button class="btn" data-a="poseReset">${icon('refresh')} Reset</button><button class="btn" data-a="poseFlip">${icon('camera-rotate')} Flip</button><button class="btn primary" data-a="poseUse">${icon('check')} Use</button></div>
-        <p class="sm muted">Tip: prop the phone up side-on, 2–3 m away, so your whole body is visible. Tracking ${esc(mode.label.toLowerCase())} angle for ${esc(ex.name)}.</p>
-        ${Pose.isNative() ? `<button class="link sm" data-a="aiDelete">Remove AI pack (frees ${AI_PACK.sizeMB} MB)</button>` : ''}`;
-    }, {
-      mount: () => {
-        const v = $('#poseVideo'), c = $('#poseCanvas'); if (!v) return;
-        Pose.start(v, c, ex, st => { const r = $('#poseReps'); if (r) r.textContent = st.reps; const q = $('#poseCue'); if (q) q.textContent = st.cue; })
-          .then(() => { const q = $('#poseCue'); if (q && q.textContent.startsWith('Loading')) q.textContent = 'Get your whole body in frame, side-on to the camera'; })
-          .catch(err => { const q = $('#poseCue'); if (q) q.textContent = (err && err.name === 'NotAllowedError') ? 'Camera permission was denied. Allow it in Android settings, Apps, Gym App.' : "Couldn't start the camera or AI model: " + (err.message || err); });
-      },
-      onClose: () => Pose.stop()
-    });
-  },
-
   openDevices() {
-    this.openSheet('devices', 'Watches, scales and sensors', () => {
-      const h = Store.data.health, sc = this.scale, s = Store.data.settings;
+    this.openSheet('devices', 'Health Connect', () => {
+      const h = Store.data.health, s = Store.data.settings;
       const native = !!Cap();
       return `${native ? '' : '<div class="card warn-card sm">Device connections work in the Android app. This browser preview can only show the screens.</div>'}
       <div class="section-head"><h3>${icon('device-watch')} Smartwatches</h3><span class="sm muted">via Health Connect</span></div>
@@ -188,35 +158,18 @@ Object.assign(UI, {
           <p>If both apps track the same night, Gym App uses one of them (Sleep as Android first) so hours aren't counted twice. Change it with Sleep source above.</p>
           <button class="btn sm" data-a="hcSettings">${icon('settings')} Open Health Connect</button></details>
         <details class="sm muted"><summary>Which watches work?</summary>
-          <p><b>Samsung Galaxy Watch:</b> Samsung Health, Settings, Health Connect, then allow sharing.<br><b>Pixel Watch and Fitbit:</b> the Fitbit app syncs to Health Connect.<br><b>Xiaomi and Redmi:</b> Mi Fitness, Profile, Health Connect.<br><b>Amazfit:</b> Zepp app, Profile, Add accounts, Health Connect.<br><b>Garmin:</b> Garmin Connect, Settings, Health Connect.<br><b>Honor and Huawei:</b> depends on model and region. If your watch can broadcast heart rate, use the heart-rate section below.<br><b>Apple Watch:</b> not possible. It only pairs with iPhone.</p></details>
+          <p><b>Samsung Galaxy Watch:</b> Samsung Health, Settings, Health Connect, then allow sharing.<br><b>Pixel Watch and Fitbit:</b> the Fitbit app syncs to Health Connect.<br><b>Xiaomi and Redmi:</b> Mi Fitness, Profile, Health Connect.<br><b>Amazfit:</b> Zepp app, Profile, Add accounts, Health Connect.<br><b>Garmin:</b> Garmin Connect, Settings, Health Connect.<br><b>Honor and Huawei:</b> depends on model and region.<br><b>Apple Watch:</b> not possible. It only pairs with iPhone.</p></details>
       </div>
-      <div class="section-head"><h3>${icon('device-watch')} Wear OS app</h3><span class="sm muted">on your watch</span></div>
-      <div class="card"><p class="sm">Gym App for Wear OS (Galaxy Watch 4 and newer, Pixel Watch, and others) shows the current set and target on your wrist, counts down rest, and lets you complete sets, add 30 s or skip rest without touching your phone.</p>
-        <p class="sm muted">Install it with the watch APK from the GitHub releases page. Your watch must be paired with this phone. See the README for the steps.</p>
-        <button class="btn sm wide" data-a="watchCheck">${icon('refresh')} Check watch connection</button>${this.watchMsg ? `<div class="sm muted center">${esc(this.watchMsg)}</div>` : ''}</div>
       <div class="section-head"><h3>${icon('layout-dashboard')} Home-screen widget</h3></div>
       <div class="card sm">Long-press your home screen, tap Widgets, and add <b>Gym App</b>. It shows your next workout, this week's progress, your streak and readiness.</div>
-      <div class="section-head"><h3>${icon('scale')} Smart scale</h3><span class="sm muted">Bluetooth</span></div>
-      <div class="card">
-        ${!sc ? `<p class="sm">Works with Xiaomi Mi Smart Scale and Mi Body Composition Scale (1 and 2). Tap the button, then step on the scale barefoot.</p><button class="btn primary wide" data-a="scaleScan">${icon('scale')} Weigh in</button>` : ''}
-        ${sc && sc.status === 'scanning' ? `<div class="center"><div class="big"><span id="scaleLive">${sc.reading ? fmtW(sc.reading.kg) : '–'}</span> <span class="sm muted">${U()}</span></div><p class="sm muted">Step on the scale and stand still…</p><button class="btn sm" data-a="scaleStop">Cancel</button></div>` : ''}
-        ${sc && sc.status === 'done' ? `<div class="center"><div class="big">${fmtW(s.unit === 'lb' ? Math.round(sc.reading.kg / 0.45359237 * 10) / 10 : Math.round(sc.reading.kg * 10) / 10)} <span class="sm muted">${U()}</span></div><p class="sm muted">${esc(sc.reading.model)}${sc.reading.impedance ? ' · impedance ' + sc.reading.impedance + ' Ω' : ''}</p>
-          <div class="grid2"><button class="btn primary" data-a="scaleSave">Save</button><button class="btn" data-a="scaleStop">Discard</button></div></div>` : ''}
-        ${sc && sc.status === 'timeout' ? `<p class="sm warn">No scale found. Make sure Bluetooth is on and step on the scale so it wakes up.</p><button class="btn wide" data-a="scaleScan">Try again</button>` : ''}
-        ${sc && sc.status === 'error' ? `<p class="sm warn">${esc(sc.err)}</p><button class="btn wide" data-a="scaleScan">Try again</button>` : ''}
-        <p class="sm muted">Other scales (Withings, Renpho, Eufy and others) sync through their own app into Health Connect.</p>
-      </div>
-      <div class="section-head"><h3>${icon('heart')} Live heart rate</h3><span class="sm muted">Bluetooth</span></div>
-      <div class="card">
-        ${BLE.hrDevice ? `<div class="li static"><span>${esc(BLE.hrDevice.name || s.hrName || 'Monitor')}</span><b><span class="hrLive">${BLE.hr || '–'}</span> bpm</b></div><button class="btn wide" data-a="hrDisconnect">Disconnect and forget</button>`
-        : `<p class="sm">Chest straps (Polar, Garmin HRM, Wahoo, Coros) and watches with heart-rate broadcast (Garmin, Amazfit, Huawei, Honor) show live heart rate during workouts and timers. The app reconnects automatically when you start a workout.</p>
-          ${s.hrDeviceId ? `<p class="sm muted">Remembered: ${esc(s.hrName || 'monitor')}</p>` : ''}<button class="btn primary wide" data-a="hrConnect">${icon('bluetooth')} Connect heart-rate monitor</button>`}
-      </div>`;
-    }, { onClose: () => { if (this.scale) { BLE.stopScan(); this.scale = null; } } });
+      <p class="sm muted">Smart scales (Xiaomi, Withings, Renpho, Eufy and others) sync weight into Health Connect through their own app, and it shows up in your measurements.</p>`;
+    });
   },
 
-  openAccount() {
-    this.openSheet('account', 'Account and sync', () => {
+  openAccount() { this.openData(); },
+  // Encrypted sync: the top section of Backup and sync
+  accountBody() {
+    {
       const a = Sync.acct;
       if (!a || !a.token) {
         const mode = this.authMode || 'new';
@@ -257,7 +210,7 @@ Object.assign(UI, {
       ${a.keyAccount ? '' : `<button class="btn wide" data-a="changePwSheet">${icon('lock')} Change password</button>`}
       <button class="btn wide" data-a="signOut">${icon('logout')} Sign out</button>
       <button class="btn wide danger-ghost" data-a="deleteAccount">${icon('trash')} Delete account and cloud data</button>`;
-    });
+    }
   },
 
   // The account key is the only way into the account, so make saving it easy
@@ -281,13 +234,15 @@ Object.assign(UI, {
 
   openPrograms() {
     this.progGoal = this.progGoal || 'all';
-    this.openSheet('programs', 'Programs', () => {
+    this.openSheet('programs', 'Plans', () => {
       const added = new Set(Store.data.routines.map(r => r.program).filter(Boolean));
       const list = PROGRAMS.filter(p => this.progGoal === 'all' || p.goal === this.progGoal);
       const b = Plan.block();
       return `<button class="card accent-card" data-a="builder">${icon('wand')}<div><b>Build my own program</b><div class="sm">Pick your goal, days and equipment. A plan is generated from the exercise library.</div></div></button>
       <div class="card"><b>${icon('calendar-stats')} Training blocks</b><p class="sm muted">5-week cycles: build intensity for 4 weeks, then a planned deload week. Works with any routine or program.</p>
         ${b && !b.done ? `<div class="sm">Current: ${esc(b.name)}, week ${b.week} of ${b.total}. <button class="link sm" data-a="endBlock">End block</button></div>` : `<div class="grid2"><button class="btn sm" data-a="startBlock" data-id="hypertrophy">Muscle block</button><button class="btn sm" data-a="startBlock" data-id="strength">Strength block</button></div>`}</div>
+      ${(() => { const ph = Climb.phase(); return `<button class="card row-card" data-a="climbStats">${icon('hand-grab')}<div><b>Climbing plan</b><div class="sm muted">${ph ? `${esc(ph.name)} phase, week ${ph.week} of 4. Tap to change or end it.` : '16 weeks in four phases (base, strength, power, perform) with hangboard work, built from your days and experience.'}</div></div></button>`; })()}
+      <div class="section-head"><h3>Ready-made programs</h3></div>
       <p class="sm muted">${PROGRAMS.length} ready-made plans, all free. Adding one creates its routines, and the coach handles progression.</p>
       <div class="chips">${[['all', 'All'], ...Object.entries(PROGRAM_GOALS)].map(([k, v]) => `<button class="chip ${this.progGoal === k ? 'on' : ''}" data-a="progGoal" data-id="${k}">${v}</button>`).join('')}</div>
       ${list.map(p => `<div class="card prog-card" data-a="programDetail" data-id="${p.id}" role="button" tabindex="0"><div class="row-between"><div><b>${esc(p.name)}</b>
@@ -314,7 +269,7 @@ Object.assign(UI, {
         <li>Tap <b>Add program</b>. It creates ${p.routines.length} routine${p.routines.length > 1 ? 's' : ''} on your Home tab, in a folder called "${esc(p.name)}".</li>
         <li>Train ${p.days} day${p.days > 1 ? 's' : ''} a week${days.length > 1 ? `, for example ${days.join(', ')}` : ''}. Home always shows which workout is next. Do them in order and repeat.</li>
         <li>"3 sets × 8–12 reps" means: pick a weight you can lift at least 8 times, do 3 sets, and rest in between. When you hit 12 reps on every set, the coach raises the weight.</li>
-        <li>Times like "3 × 30–60 s" are holds or rounds in seconds. Climbs are logged one by one with their grade.</li>
+        <li>Times like "3 × 30–60 s" are holds or rounds in seconds. Climbing sessions are logged as time.</li>
         <li>${esc(goalTip)}</li></ol></div>
       ${p.routines.map(([name, list], k) => `<div class="section-head"><h3>Workout ${k + 1}: ${esc(name)}</h3><span class="muted sm">${days[k % Math.max(1, days.length)] || ''}</span></div>
         <div class="card list">${list.map(([exId, sets, a, b]) => { const ex = Store.ex(exId); return `<button class="li" data-a="exDetail" data-id="${exId}"><span class="grow left"><b>${esc(ex.name)}</b><span class="sm muted">${esc(howTo(ex).steps.split('. ')[0])}.</span></span><span class="tag-next nowrap">${esc(targetText(ex, { sets, repMin: a, repMax: b }))}</span></button>`; }).join('')}</div>`).join('')}
@@ -330,7 +285,7 @@ Object.assign(UI, {
     let list = all.filter(e => (st.grp === 'all' || exGroup(e) === st.grp) && (!q || e.name.toLowerCase().includes(q) || exGroup(e).toLowerCase().includes(q) || (MUSCLES[e.muscle] || '').toLowerCase().includes(q)));
     const groups = {};
     list.forEach(e => (groups[exGroup(e)] = groups[exGroup(e)] || []).push(e));
-    const kind = { wr: 'Weight × reps', wbw: 'Added weight × reps', bw: 'Reps', dur: 'Timed', hang: 'Edge, grip, load, time', wdur: 'Weight × time', dist: 'Distance', climb: 'Grade' };
+    const kind = { wr: 'Weight × reps', wbw: 'Added weight × reps', bw: 'Reps', dur: 'Timed', hang: 'Edge, grip, load, time', wdur: 'Weight × time', dist: 'Distance', climb: 'Session time' };
     if (!list.length) return '<div class="empty">No matches. Try another word or category.</div>';
     if (!q && st.grp === 'all' && Object.keys(groups).length > 1 && list.length > 10)
       return `<div class="tile-grid">${Object.entries(groups).map(([g, items]) => `<button class="card tile-btn" data-a="discGroup" data-id="${esc(g)}"><b>${esc(g)}</b><span class="sm muted">${items.length} · ${esc(items.slice(0, 3).map(e => e.name).join(', '))}</span></button>`).join('')}</div>`;
@@ -346,7 +301,7 @@ Object.assign(UI, {
     const sel = (k, opts) => `<select data-cx="${k}">${opts.map(([v, l]) => `<option value="${v}" ${this.cx[k] === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
     this.openSheet('customex', 'Custom exercise', () => `
       <label class="field">Name<input data-cx="name" placeholder="Landmine press"></label>
-      <label class="field">Tracking ${sel('type', [['wr', 'Weight and reps'], ['bw', 'Bodyweight reps'], ['wbw', 'Weighted bodyweight'], ['dur', 'Time (holds, rounds)'], ['wdur', 'Weight and hold time'], ['dist', 'Distance and time'], ['climb', 'Climbing grade']])}</label>
+      <label class="field">Tracking ${sel('type', [['wr', 'Weight and reps'], ['bw', 'Bodyweight reps'], ['wbw', 'Weighted bodyweight'], ['dur', 'Time (holds, rounds)'], ['wdur', 'Weight and hold time'], ['dist', 'Distance and time'], ['climb', 'Climbing session (time)']])}</label>
       <label class="field">Main muscle ${sel('muscle', Object.entries(MUSCLES))}</label>
       <label class="field">Discipline ${sel('discipline', Object.entries(DISCIPLINES).map(([k, v]) => [k, v.name]))}</label>
       <label class="field">Equipment ${sel('equipment', ['barbell', 'dumbbell', 'machine', 'cable', 'kettlebell', 'bodyweight', 'band', 'other', 'none'].map(x => [x, x]))}</label>
@@ -361,56 +316,31 @@ Object.assign(UI, {
     this.top().title = 'Exercise library'; this.top().footer = null; this.refreshSheet();
   },
 
-  // Climbing dashboard: hardest send, flash grade, top-5 average, pyramid, wall angles, finger strength
+  // Climbing strength: finger strength as % of body weight, hangboard trend, plan
   openClimbing() {
-    const days = this._climbDays || 90;
-    const pct = v => Math.round(v * 100) + '%';
-    const block = cat => {
-      const st = Climb.stats(cat, days); if (!st) return '';
-      const L = v => Climb.label(v, cat), maxN = Math.max(1, ...st.pyramid.map(p => p.tried));
-      const angles = CLIMB_ANGLES.filter(([k]) => k && st.angles[k]);
-      return `<div class="section-head"><h3>${cat === 'boulder' ? 'Bouldering' : 'Routes'}</h3><span class="muted sm">${st.sessions} sessions · ${st.perWeek.toFixed(1)}/week</span></div>
-        <div class="stats3"><div class="stat"><div class="muted sm">Hardest send</div><b>${L(st.max)}</b></div><div class="stat"><div class="muted sm">${cat === 'boulder' ? 'Flash' : 'Flash/onsight'}</div><b>${L(st.flash)}</b></div><div class="stat"><div class="muted sm">Top-5 average</div><b>${L(st.top5)}</b></div></div>
-        <div class="stats3"><div class="stat"><div class="muted sm">Climbs</div><b>${st.n}</b></div><div class="stat"><div class="muted sm">Send rate</div><b>${pct(st.sendRate)}</b></div><div class="stat"><div class="muted sm">Tries per send</div><b>${st.triesPerSend ? st.triesPerSend.toFixed(1) : '–'}</b></div></div>
-        <div class="card"><b>Grade pyramid</b><div class="sm muted">Sends (solid) and attempts per grade. A healthy pyramid has 2–3 sends at each grade below your max.</div>
-          ${st.pyramid.map(p => `<div class="hbar pyr"><span>${esc(p.g)}</span><div><div style="width:${p.tried / maxN * 100}%" class="tried"><div style="width:${p.tried ? p.sent / p.tried * 100 : 0}%"></div></div></div><span>${p.sent}/${p.tried}</span></div>`).join('')}</div>
-        ${st.trend.length > 1 ? `<div class="card"><b>Hardest send per session</b>${lineChart(st.trend, { label: 'hardest send', fmt: L })}</div>` : ''}
-        ${angles.length ? `<div class="card"><b>By wall angle</b><div class="sm muted">Average sent grade. A big gap shows the style to train.</div>${angles.map(([k, l]) => `<div class="li static"><span>${l}</span><span class="sm muted">${st.angles[k].n} sends · avg ${L(st.angles[k].avg)}</span></div>`).join('')}</div>` : ''}`;
-    };
-    this.openSheet('climbing', 'Climbing coach', () => {
-      const f = Climb.fingers(), streak = Climb.fingerDays();
-      const body = block('boulder') + block('route');
-      const ph = Climb.phase(), pr = Climb.profile(), lr = Climb.loadRatio(), wl = Climb.weeklyLoad(8);
-      const projs = ['boulder', 'route'].flatMap(c => Climb.projects(c).map(p => ({ ...p, cat: c }))).slice(0, 6);
-      const top = `
-        <div class="card ${ph ? 'accent-card col' : ''}">${ph ? `<b>${icon('calendar-stats')} ${esc(ph.name)} phase · week ${ph.week} of 4</b><div class="sm">${esc(ph.desc)}</div>
+    this.openSheet('climbing', 'Climbing strength', () => {
+      const f = Climb.fingers(), streak = Climb.fingerDays(), ph = Climb.phase(), pp = Climb.pullPct(), trend = Climb.hangTrend(), bw = +Store.data.settings.bodyweight || 0;
+      return `<div class="card ${ph ? 'accent-card col' : ''}">${ph ? `<b>${icon('calendar-stats')} ${esc(ph.name)} phase · week ${ph.week} of 4</b><div class="sm">${esc(ph.desc)}</div>
           <div class="phase-bar">${(Climb.PHASES[Climb.plan().focus] || Climb.PHASES.boulder).map((p, k) => `<span class="${k === ph.idx ? 'on' : k < ph.idx ? 'done' : ''}">${esc(p[0])}</span>`).join('')}</div>
           <div class="grid2"><button class="btn sm" data-a="climbPlan">${icon('adjustments')} Change plan</button><button class="btn sm ghost" data-a="climbPlanEnd">End plan</button></div>`
-          : `<b>${icon('route')} Get a climbing plan</b><div class="sm muted">A 16-week plan in four phases (base, strength, power, perform), built from your focus, days, level and equipment. The coach then adjusts every session to the phase you're in.</div><button class="btn primary wide" data-a="climbPlan">${icon('wand')} Build my climbing plan</button>`}</div>
-        <div class="section-head"><h3>Your profile</h3></div>
-        <div class="stats3"><div class="stat"><div class="muted sm">Level</div><b>${pr.level ? Climb.label(pr.level.v, 'boulder') : '–'}</b></div><div class="stat"><div class="muted sm">Fingers</div><b>${pr.fingerPct ? pr.fingerPct + '%' : '–'}</b></div><div class="stat"><div class="muted sm">Pull-up 1RM</div><b>${pr.pullPct ? pr.pullPct + '%' : '–'}</b></div></div>
-        <div class="card">${pr.advice.map(a => `<div class="insight ${a.tone}">${icon(a.tone === 'warn' ? 'alert-triangle' : a.tone === 'good' ? 'circle-check' : 'bulb')}<span>${esc(a.text)}</span></div>`).join('')}
-          <div class="sm muted" style="padding-top:6px">Fingers and pull-up are % of body weight. Level is your top-5 average. Rough guide from published climber averages, not a precise prediction.</div>
+          : `<b>${icon('route')} Get a climbing plan</b><div class="sm muted">A 16-week plan in four phases (base, strength, power, perform), built from your focus, days, experience and equipment. The coach then adjusts every session to the phase you're in.</div><button class="btn primary wide" data-a="climbPlan">${icon('wand')} Build my climbing plan</button>`}</div>
+        <div class="section-head"><h3>Finger strength</h3><span class="muted sm">% of body weight</span></div>
+        <div class="stats3"><div class="stat"><div class="muted sm">Strongest hang</div><b>${f && f.hang ? f.hang.pct + '%' : '–'}</b></div><div class="stat"><div class="muted sm">Block lift</div><b>${f && f.lift ? f.lift.pct + '%' : '–'}</b></div><div class="stat"><div class="muted sm">Pull-up 1RM</div><b>${pp ? pp + '%' : '–'}</b></div></div>
+        ${trend.length > 1 ? `<div class="card"><b>Strongest hang per session</b><div class="sm muted">Body weight plus added weight, adjusted to a 20 mm edge</div>${lineChart(trend, { label: 'strongest hang', fmt: v => Math.round(v) + '%' })}</div>` : ''}
+        <div class="card">${f && f.hang ? `<div class="li static col"><b>Best hang</b><span class="sm muted">${esc(f.hang.name)}: ${f.hang.w ? (f.hang.w > 0 ? '+' : '') + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s${f.hang.edge ? ' on ' + f.hang.edge + ' mm' : ''}</span></div>`
+          : `<div class="sm">${bw ? 'Log a Max Hang (Added Weight) to see your finger strength.' : 'Log your body weight (You, Body weight), then do a max hang to see your finger strength.'}</div>`}
           <button class="btn sm wide" data-a="quickStart" data-id="max_hang_added_weight">${icon('hand-grab')} Do the finger test</button></div>
-        <div class="section-head"><h3>Workload</h3><span class="muted sm">every attempt counts</span></div>
-        <div class="card">${lineChart(wl, { label: 'weekly climbing load', fmt: Math.round })}
-          ${lr ? `<div class="insight ${lr.ratio > 1.5 ? 'warn' : lr.ratio < 0.7 ? 'info' : 'good'}">${icon(lr.ratio > 1.5 ? 'alert-triangle' : 'activity')}<span>${lr.ratio > 1.5 ? `This week's load is ${lr.ratio}× your 4-week average. Big jumps are when finger injuries happen. Keep the next sessions easy.` : lr.ratio < 0.7 ? `This week is lighter than usual (${lr.ratio}×). Fine for recovery.` : `This week's load is ${lr.ratio}× your average: a safe, steady build.`}</span></div>` : '<div class="sm muted">Log a few weeks to see your load trend and injury-risk warnings.</div>'}
-          <div class="sm muted">Load counts every attempt, weighted by grade and by how far you got (your high point), so hard projects you haven't sent still count.</div></div>
-        ${projs.length ? `<div class="section-head"><h3>Projects</h3></div><div class="card list">${projs.map(p => `<div class="li static"><span><b>${esc(p.g)}</b><span class="sm muted"> · ${p.tries} tries over ${p.sessions} session(s)</span></span><span class="proj-hp"><span style="width:${Math.round(p.best * 100)}%"></span></span></div>`).join('')}<div class="sm muted" style="padding:6px 14px">Bar = your best high point. Log "Fell low / midway / high" when you don't send.</div></div>` : ''}`;
-      return top + `<div class="section-head"><h3>Stats</h3></div><div class="chips">${[[30, '30 days'], [90, '90 days'], [365, '1 year']].map(([n, l]) => `<button class="chip ${days === n ? 'on' : ''}" data-a="climbDays" data-id="${n}">${l}</button>`).join('')}</div>
-        ${body || '<div class="empty">Log a climbing session (Bouldering, Lead Climbing, Board Climbing and others) to see your grade pyramid and stats.</div>'}
-        <div class="section-head"><h3>Fingers</h3></div>
-        <div class="card">${f ? `${f.hang ? `<div class="li static"><span>Strongest hang</span><b>${f.hang.pct}% body weight</b></div><div class="sm muted">${esc(f.hang.name)}: ${f.hang.w ? '+' + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s on ${fmtDate(f.hang.date)}. Around 150% for 10s on a 20 mm edge is typical of V8 / 7c+ climbers.</div>` : ''}
-          ${f.lift ? `<div class="li static"><span>Strongest block lift</span><b>${f.lift.pct}% body weight</b></div>` : ''}` : `<div class="sm">Log <b>Max Hang (Added Weight)</b> or a block lift, and set your body weight in Settings, to see finger strength as a % of body weight.</div>`}
-          <div class="sm muted" style="padding-top:6px">${streak ? `${streak} day(s) in a row on your fingers. ${streak >= 3 ? 'Take a rest day soon. Pulleys recover slowly.' : ''}` : 'Fingers rested.'}</div></div>`;
+        <div class="card sm">${icon(streak >= 3 ? 'alert-triangle' : 'circle-check')} ${streak ? `${streak} day(s) in a row on your fingers.${streak >= 3 ? ' Take a rest day soon: pulleys recover slower than muscles.' : ''}` : 'Fingers rested.'}</div>
+        <div class="section-head"><h3>Hangboard timers</h3></div>
+        <div class="timer-tiles">${TIMER_GROUPS.hang.list.map(t => `<button class="card timer-tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<span><b>${TIMER_PRESETS[t].name}</b><span class="sm muted">${esc(TIMER_PRESETS[t].about)}</span></span></button>`).join('')}</div>`;
     });
   },
 
   // Climbing plan builder: big tap targets, one question per row
   openClimbPlan() {
     const pl = Climb.plan();
-    const lv = Climb.level(), sessions = Climb.climbSessions();
-    this.cplan = this.cplan || { focus: pl ? pl.focus : 'boulder', days: pl ? pl.days : 3, level: pl ? pl.level : (sessions < 25 ? 'new' : lv && lv.v >= 6 ? 'adv' : 'mid'), hangboard: pl ? pl.hangboard : true };
+    const sessions = Climb.climbSessions();
+    this.cplan = this.cplan || { focus: pl ? pl.focus : 'boulder', days: pl ? pl.days : 3, level: pl ? pl.level : (sessions < 25 ? 'new' : 'mid'), hangboard: pl ? pl.hangboard : true };
     const seg = (k, label, opts) => `<div class="ci"><div class="ci-label">${label}</div><div class="seg">${opts.map(([v, l]) => `<button class="seg-btn ${this.cplan[k] === v ? 'on' : ''}" data-a="cplanSet" data-id="${k}:${v}">${l}</button>`).join('')}</div></div>`;
     this.openSheet('climbplan', 'Climbing plan', () => {
       const p = Climb.buildPlan(this.cplan), phases = Climb.PHASES[this.cplan.focus];
@@ -438,7 +368,8 @@ Object.assign(UI, {
         <div class="card"><b>Session volume</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.w || 0) * (+s.r || 0), 0) })), { label: 'volume', fmt: Math.round })}</div>`;
     } else if (ex.type === 'bw') charts = `<div class="card"><b>Most reps in a set</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.map(s => +s.r || 0)) })), { label: 'max reps' })}</div><div class="card"><b>Total reps</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.r || 0), 0) })), { label: 'total reps' })}</div>`;
     else if (ex.type === 'wdur') charts = `<div class="card"><b>Heaviest hold (${U()})</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.filter(s => (+s.t || 0) >= 5).map(s => +s.w || 0), 0) })), { label: 'heaviest hold' })}</div>${(() => { const f = Climb.fingers(); return f && f.hang && !Climb.LIFT.includes(ex.id) ? `<div class="card sm">Strongest hang: <b>${f.hang.pct}% of body weight</b> (${f.hang.w ? '+' + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s).</div>` : ''; })()}`;
-    else if (ex.type === 'climb') { const cat = Climb.cat(ex); charts = `<div class="card"><b>Hardest send per session</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(-1, ...h.sets.filter(s => s.sent).map(s => Climb.value(s.g, cat)).filter(v => v != null)) })).filter(p => p.y > -1), { label: 'hardest send', fmt: v => Climb.label(v, cat) })}</div><button class="btn wide" data-a="climbStats">${icon('mountain')} Climbing coach: plan, profile, pyramid, workload</button>`; }
+    else if (ex.type === 'climb') charts = `<div class="card"><b>Session time (minutes)</b>${lineChart(hist.filter(h => h.sets.some(s => +s.t)).map(h => ({ x: h.date, y: Math.round(h.sets.reduce((a, s) => a + (+s.t || 0), 0) / 60) })), { label: 'session minutes' })}</div>`;
+    else if (ex.type === 'hang') charts = `<div class="card"><b>Most added weight (${U()})</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.filter(s => (+s.t || 0) >= 5).map(s => +s.w || 0), 0) })), { label: 'added weight' })}</div><button class="btn wide" data-a="climbStats">${icon('hand-grab')} Climbing strength</button>`;
     else if (ex.type === 'dur') charts = `<div class="card"><b>Longest hold or round (sec)</b>${lineChart(hist.map(h => ({ x: h.date, y: Math.max(...h.sets.map(s => +s.t || 0)) })), { label: 'longest' })}</div>`;
     else if (ex.type === 'dist') charts = `<div class="card"><b>Distance (km)</b>${lineChart(hist.map(h => ({ x: h.date, y: h.sets.reduce((a, s) => a + (+s.d || 0), 0) })), { label: 'distance' })}</div>
       <div class="card"><b>Pace (min/km)</b>${lineChart(hist.filter(h => h.sets[0].d).map(h => ({ x: h.date, y: h.sets[0].t / h.sets[0].d / 60 })), { label: 'pace', fmt: v => fmtDur(v * 60) })}</div>`;
@@ -481,14 +412,15 @@ Object.assign(UI, {
       cardio: 'Log distance and time. The coach applies the 10% rule for distance and nudges your pace. You can import GPX and TCX files from Strava, Garmin and other trackers.',
       combat: 'Use the round timers, then log rounds. The coach adds rounds over time.',
       mobility: 'Timed holds. The coach adds about 10% hold time each session.',
-      climbing: 'Log each climb with its grade, tries, result (flash, redpoint, project) and wall angle. After 3 sends at your top grade the coach moves your project up a grade and plans a pyramid session. Max hangs track added weight, so you can see finger strength as a % of body weight. Choose V or Font, YDS or French grades in Settings.',
+      climbing: 'Log climbing sessions as time. Hangboard exercises track edge depth, grip, added weight and seconds, so you can see finger strength as a % of body weight. The coach adds weight when every hang holds and tells you when your fingers need a rest day.',
       calisthenics: 'Follow the skill ladders. Once you hit a step\'s goal, the coach tells you to move up.',
       conditioning: 'Interval timers keep running with the screen off, using notifications.',
       strength: 'Double progression: add reps until you top the range, then add weight.'
     }[key];
     this.disc = { q: '', grp: 'all' };
     this.openSheet('disc', d.name, () => `<div class="card tip-card sm"><b>${icon(d.icon)} How ${esc(d.name.toLowerCase())} works here</b><p>${extra}</p><p class="muted">Tap any exercise to see how to do it. Tap Start to begin a workout with it.</p></div>
-      ${key === 'climbing' ? `<button class="btn wide" data-a="climbStats">${icon('mountain')} Climbing coach: plan, profile and stats</button>` : ''}
+      ${key === 'climbing' ? `<button class="btn wide" data-a="climbStats">${icon('hand-grab')} Climbing strength: fingers, hangboard and plan</button>` : ''}
+      ${key === 'calisthenics' ? `<div class="section-head"><h3>Skill ladders</h3></div>${LADDERS.map(l => { const p = Coach.ladderProgress(l); return `<button class="card ladder" data-a="ladder" data-id="${l.id}"><div class="row-between"><b>${l.name}</b><span class="sm muted">${p}/${l.steps.length}</span></div><div class="progress"><div style="width:${p / l.steps.length * 100}%"></div></div><div class="sm muted">${p >= l.steps.length ? 'Ladder complete' : 'Current step: ' + esc(Store.ex(l.steps[Math.min(p, l.steps.length - 1)].exId).name)}</div></button>`; }).join('')}` : ''}
       ${timers.length ? `<div class="section-head"><h3>Timers</h3></div><div class="timer-tiles">${timers.map(t => `<button class="card timer-tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<span><b>${TIMER_PRESETS[t].name}</b><span class="sm muted">${esc(TIMER_PRESETS[t].about)}</span></span></button>`).join('')}</div>` : ''}
       <div class="section-head"><h3>Exercises</h3></div>
       <input class="search" type="search" data-f="discq" placeholder="Search ${list.length} exercises" value="${esc(this.disc.q)}" aria-label="Search exercises">
@@ -503,6 +435,20 @@ Object.assign(UI, {
       ${l.steps.map((st, i) => { const ex = Store.ex(st.exId); const state = i < p ? 'done' : i === p ? 'current' : 'locked'; return `<div class="card step ${state}">
         <div class="row-between"><span>${icon(state === 'done' ? 'circle-check' : state === 'current' ? 'player-play' : 'lock')} <b>${esc(ex.name)}</b></span><span class="sm muted">${st.sets} × ${st.goal}${ex.type === 'dur' ? 's' : ''}</span></div>
         ${state === 'current' ? `<button class="btn sm primary" data-a="quickStart" data-id="${st.exId}">Train this step</button>` : ''}</div>`; }).join('')}`; });
+  },
+
+  openTimerGroup(key) {
+    const g = TIMER_GROUPS[key];
+    this.openSheet('tgroup', g.name + ' timers', () => `<p class="sm muted">Pick a timer. You can change the times before you start. Timers keep running with the screen off.</p>
+      <div class="timer-tiles">${g.list.map(t => `<button class="card timer-tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<span><b>${TIMER_PRESETS[t].name}</b><span class="sm muted">${esc(TIMER_PRESETS[t].about)}</span></span></button>`).join('')}</div>`);
+  },
+
+  openCalculators() {
+    const list = [['onerm', 'calculator', '1RM calculator', 'Your one-rep max from any set, and the weight for each %'], ['rpe', 'gauge', 'RPE chart', 'The weight for a rep count at a target effort'],
+      ['standards', 'trophy', 'Strength level', 'Squat, bench, deadlift and press compared with others at your body weight'], ['cali', 'stretching', 'Calisthenics 1RM', 'Max added weight for pull-ups, dips and more'],
+      ['convert', 'arrows-exchange', 'Bodyweight and barbell', 'What your pull-ups or dips mean on a barbell, and back']];
+    this.openSheet('calc', 'Calculators', () => `<div class="card list">${list.map(([id, ic, n, d]) => `<button class="li" data-a="tool" data-id="${id}">${icon(ic)}<span class="grow left"><b>${n}</b><span class="sm muted">${d}</span></span>${icon('chevron-right', 'muted')}</button>`).join('')}</div>
+      <p class="sm muted">Plate loading is on every barbell exercise in a workout (tap Plates). Warm-up sets are in the exercise menu.</p>`);
   },
 
   openTimerSetup(type) {
@@ -544,19 +490,18 @@ Object.assign(UI, {
     Timer.tick();
   },
 
-  openTool(id) {
+  openTool(id, preset) {
     const s = Store.data.settings;
     const best = id => { const b = bestOf(id); return b.e1 ? String(Math.round(b.e1)) : ''; };
     this.toolState = { target: '100', bar: String(s.bar), w: '100', r: '5', ex: 'pull_up', bw: String(s.bodyweight || 75), add: '0', reps: '8', sex: s.sex || 'm',
-      squat: best('squat_barbell'), bench: best('bench_press_barbell'), deadlift: best('deadlift_barbell'), ohp: best('overhead_press_barbell'), lift: 'bench', one: best('bench_press_barbell') || '80', rpe: '8' };
-    const titles = { plates: 'Plate calculator', warmup: 'Warm-up calculator', onerm: '1RM calculator', cali: 'Calisthenics 1RM', convert: 'Bodyweight ↔ barbell', standards: 'Strength level', rpe: 'RPE chart' };
+      squat: best('squat_barbell'), bench: best('bench_press_barbell'), deadlift: best('deadlift_barbell'), ohp: best('overhead_press_barbell'), lift: 'bench', one: best('bench_press_barbell') || '80', rpe: '8', ...(preset || {}) };
+    const titles = { plates: 'Plate loading', onerm: '1RM calculator', cali: 'Calisthenics 1RM', convert: 'Bodyweight ↔ barbell', standards: 'Strength level', rpe: 'RPE chart' };
     const inp = (k, label, mode = 'decimal') => `<label class="field">${label}<input inputmode="${mode}" data-tool="${k}" value="${esc(this.toolState[k])}"></label>`;
     const sel = (k, label, opts) => `<label class="field">${label}<select data-tool="${k}">${opts.map(([v, l]) => `<option value="${v}" ${this.toolState[k] === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
     const caliOpts = Object.entries(Strength.CALI).map(([k, v]) => [k, v[0]]);
     this.toolId = id;
     this.openSheet('tool', titles[id], () => `
       ${id === 'plates' ? `<label class="field">Target weight (${U()})<input inputmode="decimal" data-tool="target" value="${this.toolState.target}"></label><label class="field">Bar (${U()})<input inputmode="decimal" data-tool="bar" value="${this.toolState.bar}"></label>` : ''}
-      ${id === 'warmup' ? `<label class="field">Working weight (${U()})<input inputmode="decimal" data-tool="target" value="${this.toolState.target}"></label>` : ''}
       ${id === 'onerm' ? `<div class="grid2"><label class="field">Weight<input inputmode="decimal" data-tool="w" value="${this.toolState.w}"></label><label class="field">Reps<input inputmode="numeric" data-tool="r" value="${this.toolState.r}"></label></div>` : ''}
       ${id === 'cali' ? `${sel('ex', 'Exercise', caliOpts)}<div class="grid3">${inp('bw', 'Body weight (' + U() + ')')}${inp('add', 'Added (' + U() + ')')}${inp('reps', 'Reps', 'numeric')}</div><p class="sm muted">Added weight: a belt or vest. Use a negative number for band or machine assistance.</p>` : ''}
       ${id === 'convert' ? `<div class="card tip-card sm">Rough estimates. Leverage, technique and training history change these a lot, so use them as a starting point, not a test result.</div>
@@ -576,10 +521,6 @@ Object.assign(UI, {
       const max = Math.max(...s.plates);
       return `<div class="card center"><div class="barbell">${used.slice().reverse().map(p => `<span class="plate" style="height:${30 + p / max * 70}px">${p}</span>`).join('')}<span class="bar-mid"></span>${used.map(p => `<span class="plate" style="height:${30 + p / max * 70}px">${p}</span>`).join('')}</div>
         <div><b>Each side:</b> ${used.length ? used.join(' + ') : 'nothing, bar only'}</div>${side > 0.01 ? `<div class="sm warn">${round1(side * 2)} ${U()} can't be loaded with your plates</div>` : ''}</div>`;
-    }
-    if (this.toolId === 'warmup') {
-      const w = num(t.target); if (!w) return '';
-      return `<div class="card list">${warmupSets(w).map((x, i) => `<div class="li static"><span>Warm-up ${i + 1}</span><b>${fmtW(x.w)} ${U()} × ${x.r}</b></div>`).join('')}<div class="li static"><span>Working sets</span><b>${fmtW(w)} ${U()}</b></div></div>`;
     }
     const kg = Store.data.settings.unit === 'lb' ? 0.45359237 : 1, W = v => `${fmtW(Coach.roundW(v))} ${U()}`;
     if (this.toolId === 'cali' || this.toolId === 'convert') {
@@ -632,7 +573,6 @@ Object.assign(UI, {
   openSettings() {
     const s = Store.data.settings;
     this.openSheet('settings', 'Settings', () => `
-      <label class="field">Your name<input data-setting="name" value="${esc(s.name)}" placeholder="Optional"></label>
       <label class="field">Units<select data-setting="unit"><option value="kg" ${s.unit === 'kg' ? 'selected' : ''}>Kilograms (kg)</option><option value="lb" ${s.unit === 'lb' ? 'selected' : ''}>Pounds (lb)</option></select></label>
       <p class="sm muted">Changing units doesn't convert weights you've already logged.</p>
       <div class="grid2">
@@ -640,8 +580,6 @@ Object.assign(UI, {
         <label class="field">Weekly workout goal<input inputmode="numeric" data-setting="weekGoal" value="${s.weekGoal}"></label>
         <label class="field">Bar weight (${s.unit})<input inputmode="decimal" data-setting="bar" value="${s.bar}"></label>
         <label class="field">Body weight (${s.unit})<input inputmode="decimal" data-setting="bodyweight" value="${s.bodyweight}"></label>
-        <label class="field">Boulder grades<select data-setting="boulderScale">${['V', 'Font'].map(k => `<option value="${k}" ${Climb.system('boulder') === k ? 'selected' : ''}>${GRADE_SYSTEMS[k].name}</option>`).join('')}</select></label>
-        <label class="field">Route grades<select data-setting="routeScale">${['YDS', 'French'].map(k => `<option value="${k}" ${Climb.system('route') === k ? 'selected' : ''}>${GRADE_SYSTEMS[k].name}</option>`).join('')}</select></label>
       </div>
       <div class="field">Workout reminders
         <div class="chips" style="margin-top:6px">${[[2, 'Mon'], [3, 'Tue'], [4, 'Wed'], [5, 'Thu'], [6, 'Fri'], [7, 'Sat'], [1, 'Sun']].map(([n, l]) => `<button class="chip ${((s.reminders || {}).days || []).includes(n) ? 'on' : ''}" data-a="toggleReminder" data-id="${n}" aria-pressed="${((s.reminders || {}).days || []).includes(n)}">${l}</button>`).join('')}</div>
@@ -654,18 +592,18 @@ Object.assign(UI, {
         <div class="chips" style="margin-top:6px">${Object.entries(EQUIPMENT).map(([k, v]) => `<button class="chip ${Plan.gym().includes(k) ? 'on' : ''}" data-a="toggleGym" data-id="${k}">${v}</button>`).join('')}</div></div>
       <label class="field row"><input type="checkbox" data-setting="keepAwake" ${s.keepAwake !== false ? 'checked' : ''}> Keep the screen on during workouts and timers</label>
       <label class="field">Available plates (${s.unit}, comma separated)<input data-setting="plates" value="${s.plates.join(', ')}"></label>
-      <button class="btn wide" data-a="updates">${icon('refresh')} App updates</button>
-      <button class="btn wide" data-a="errorLog">${icon('bug')} Error log (${ErrorLog.list().length})</button>`);
+      <div class="section-head"><h3>App updates</h3></div>
+      ${this.updatesBody()}`);
   },
 
-  openUpdates() {
+  openUpdates() { this.openSettings(); },
+  updatesBody() {
     const s = Store.data.settings;
-    this.openSheet('settings', 'App updates', () => {
+    {
       const st = { idle: 'Not checked yet', checking: 'Checking…', current: 'You\'re up to date', downloading: 'Downloading update…', ready: `Update ${Updater.info && Updater.info.version} downloaded. It switches over when you next leave the app.`, apk: 'A new app version is available', web: 'A new version is available', error: 'Check failed: ' + (Updater.err || '') }[Updater.state];
       const apk = { downloading: 'Downloading the new app version in the background…', ready: Updater.apkStatus && Updater.apkStatus.silent ? 'New app version downloaded. It installs by itself when you leave the app (not during a workout).' : 'New app version downloaded. Tap Install.', permission: 'Needs a one-time permission to install its own updates.', installing: 'Installing…', tap: 'Tap Install to finish the update.', manual: 'This version can\'t install updates by itself. Install the new APK once and future updates are automatic.', error: 'App update failed: ' + (Updater.err || ''), done: 'Installed. Gym App restarts with the new version.' }[Updater.apkState];
       return `<div class="card"><div class="li static"><span>App content version</span><b>${esc(Updater.bundleVersion)}</b></div><div class="li static"><span>Android app version</span><b>${esc(Updater.nativeVersion || 'browser')}${Updater.nativeBuild ? ' (build ' + Updater.nativeBuild + ')' : ''}</b></div>
         <div class="li static"><span>Status</span><span class="sm">${esc(st)}</span></div>${apk ? `<div class="li static"><span>App update</span><span class="sm">${esc(apk)}</span></div>` : ''}</div>
-      <label class="field">Update feed URL (update.json)<input data-setting="updateUrl" value="${esc(s.updateUrl)}" placeholder="https://raw.githubusercontent.com/you/overload/main/dist/update.json"></label>
       <label class="field row"><input type="checkbox" data-setting="autoUpdate" ${s.autoUpdate !== false ? 'checked' : ''}> Update automatically (downloads in the background and installs when you leave the app, never during a workout)</label>
       <button class="btn primary wide" data-a="checkUpdate">${icon('refresh')} Check now</button>
       ${Updater.state === 'ready' ? `<button class="btn wide" data-a="applyUpdate">${icon('player-play')} Restart and apply now</button>` : ''}
@@ -673,12 +611,12 @@ Object.assign(UI, {
       ${['ready', 'tap'].includes(Updater.apkState) ? `<button class="btn wide" data-a="installUpdate">${icon('download')} Install app update now</button>` : ''}
       ${Updater.apkState === 'manual' ? `<button class="btn wide" data-a="openApk">${icon('download')} Download new APK</button>` : ''}
       <p class="sm muted">Updates are automatic. New features and fixes switch over quietly when you leave the app. New app versions download in the background and install themselves too: on Android 12 and newer this happens silently after you allow it once. Android always checks that an update is signed by the same developer key.</p>`;
-    });
+    }
   },
 
   openData() {
     this.impUnit = this.impUnit || U();
-    this.openSheet('data', 'Import, export and sync', () => {
+    this.openSheet('data', 'Backup and sync', () => {
       const r = this.importResult;
       let res = '';
       if (r && r.error) res = `<div class="card warn-card"><b>Couldn't import ${esc(r.file)}</b><div class="sm">${esc(r.error)}</div><button class="btn sm" data-a="importCancel">OK</button></div>`;
@@ -688,7 +626,13 @@ Object.assign(UI, {
         res = `<div class="card accent-card col"><b>${esc(r.source)} file: ${esc(r.file)}</b><div class="sm">${r.workouts.length} workouts · ${sets} sets · ${range}</div>${r.exercisesCreated ? `<div class="sm">${r.exercisesCreated} exercises weren't in the library and were added as custom exercises.</div>` : ''}<div class="sm">Duplicates are skipped automatically.</div>
           <div class="grid2"><button class="btn primary" data-a="importCommit">Import</button><button class="btn" data-a="importCancel">Cancel</button></div></div>`;
       }
-      return `<div class="section-head"><h3>Import from other apps</h3></div>
+      return `<div class="section-head"><h3>${icon('cloud')} Encrypted sync</h3><span class="sm muted">optional</span></div>
+      ${this.accountBody()}
+      <div class="section-head"><h3>${icon('database-export')} Backup file</h3></div>
+      <button class="btn wide primary" data-a="exportJSON">${icon('database-export')} Save a full backup (.json)</button>
+      <button class="btn wide" data-a="exportStrong">${icon('table-export')} Spreadsheet (.csv, opens in Strong and Hevy)</button>
+      <p class="sm muted">Android also backs up the app's data to your Google account if Backup is on in your phone's settings.</p>
+      <div class="section-head"><h3>${icon('file-import')} Import from other apps</h3></div>
       <div class="card sm">
         <div class="fmt"><b>Hevy</b>: Settings, Export data, Export workouts (CSV)</div>
         <div class="fmt"><b>Strong</b>: Settings, Export data (CSV)</div>
@@ -700,11 +644,6 @@ Object.assign(UI, {
       <label class="field">Weight unit in the file (when the file doesn't say)<select data-imp="1"><option value="kg" ${this.impUnit === 'kg' ? 'selected' : ''}>kg</option><option value="lb" ${this.impUnit === 'lb' ? 'selected' : ''}>lb</option></select></label>
       <label class="btn primary wide">${icon('file-import')} Choose file<input type="file" accept=".csv,.json,.gpx,.tcx,text/csv,application/json,application/gpx+xml,application/xml,text/xml" data-a-change="importFile" hidden></label>
       ${res}
-      <div class="section-head"><h3>Export</h3></div>
-      <button class="btn wide" data-a="exportJSON">${icon('database-export')} Full backup (.json)</button>
-      <button class="btn wide" data-a="exportStrong">${icon('table-export')} Strong-format CSV (Hevy can import this)</button>
-      <button class="btn wide" data-a="exportHevy">${icon('table-export')} Hevy-format CSV</button>
-      <p class="sm muted">Android also backs up the app's data to your Google account automatically, if Backup is on in your phone's settings. To sync two phones, export a backup on one and import it on the other. Workouts are merged and duplicates skipped.</p>
       <div class="section-head"><h3>Danger zone</h3></div>
       <button class="btn wide danger-ghost" data-a="wipeData">${icon('trash')} Delete all data</button>`;
     });
