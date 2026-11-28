@@ -116,7 +116,13 @@ const Achievements = {
     ['run10', '10K runner', 'Run 10 km in one go', s => s.longestRun >= 10],
     ['ladder', 'Skill unlocked', 'Complete any skill ladder', s => s.laddersDone >= 1],
     ['multi', 'All-rounder', 'Train 4 different disciplines', s => s.disciplines >= 4],
-    ['block', 'Periodized', 'Finish a 5-week training block', s => s.blocks >= 1]
+    ['block', 'Periodized', 'Finish a 5-week training block', s => s.blocks >= 1],
+    ['c1', 'First send', 'Log a sent climb', s => s.sends >= 1],
+    ['cflash', 'Flash', 'Flash a boulder or route', s => s.flashes >= 1],
+    ['c100', 'Hundred climbs', 'Log 100 climbs', s => s.climbs >= 100],
+    ['cv5', 'V5 club', 'Send V5 (6C) or harder', s => s.boulderMax >= 5],
+    ['cv8', 'V8 club', 'Send V8 (7B) or harder', s => s.boulderMax >= 8],
+    ['f150', 'Steel fingers', 'Hang 150% of body weight', s => s.fingerPct >= 150]
   ],
   stats() {
     const d = Store.data, kg = d.settings.unit === 'lb' ? 0.45359237 : 1, bw = d.settings.bodyweight || 0;
@@ -128,7 +134,9 @@ const Achievements = {
       prs: d.workouts.reduce((a, w) => a + (w.prs || 0), 0),
       benchBW: bw ? best('bench_press_barbell') / bw : 0, squatBW: bw ? best('squat_barbell') / bw : 0, deadBW: bw ? best('deadlift_barbell') / bw : 0,
       longestRun: Math.max(0, ...runs), laddersDone: LADDERS.filter(l => Coach.ladderProgress(l) >= l.steps.length).length,
-      disciplines: disc.size, blocks: d.settings.blocksDone || 0
+      disciplines: disc.size, blocks: d.settings.blocksDone || 0,
+      ...(() => { const c = Climb.climbs(0), sent = c.filter(x => x.sent), b = sent.filter(x => x.cat === 'boulder').map(x => x.v), f = Climb.fingers();
+        return { climbs: c.length, sends: sent.length, flashes: sent.filter(x => Climb.isFlash(x)).length, boulderMax: b.length ? Math.max(...b) : -1, fingerPct: f && f.hang ? f.hang.pct : 0 }; })()
     };
   },
   unlocked() { const s = this.stats(); return new Set(this.LIST.filter(a => a[3](s)).map(a => a[0])); },

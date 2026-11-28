@@ -48,6 +48,7 @@ const Actions = {
   },
   rDelete() { if (!confirm('Delete this routine? Your workout history is kept.')) return; Store.tombstone(this.draft.id); Store.data.routines = Store.data.routines.filter(r => r.id !== this.draft.id); Store.save(true); this.closeSheet(); },
   programs() { this.openPrograms(); },
+  toggleBadges() { this._allBadges = !this._allBadges; this.render(); },
   toggleIns() { this._allIns = !this._allIns; this.render(); },
   watchDemo(el, d) { openExternal('https://www.youtube.com/results?search_query=' + encodeURIComponent(Store.ex(d.id).name + ' exercise proper form')); },
   progGoal(el, d) { this.progGoal = d.id; this.refreshSheet(); },
@@ -89,6 +90,20 @@ const Actions = {
   addSet(el, d) {
     const e = Store.data.active.exercises[+d.i], last = e.sets[e.sets.length - 1] || {};
     e.sets.push({ type: 'N', w: last.w || '', r: '', t: '', d: '', g: '', a: '', rpe: '', done: false, p: { ...(last.p || {}), w: last.w || (last.p || {}).w, r: last.r || (last.p || {}).r, t: last.t || (last.p || {}).t } });
+    Store.save(); this.refreshSheet();
+  },
+  quickRes(el, d) { Store.data.active.exercises[+d.i].qr = d.id; Store.save(); this.refreshSheet(); },
+  quickClimb(el, d) {
+    const e = Store.data.active.exercises[+d.i], st = e.qr || 'sent';
+    const set = { type: 'N', g: d.id, a: 1, st, sent: !/^p\d/.test(st), ang: '', w: '', r: '', t: '', d: '', rpe: '', done: true };
+    const k = e.sets.findIndex(s => !s.done && !s.g);
+    if (k >= 0) e.sets[k] = { ...e.sets[k], ...set }; else e.sets.push(set);
+    Store.save(); this.refreshSheet();
+    if (navigator.vibrate) try { navigator.vibrate(15); } catch (x) { }
+  },
+  quickUndo(el, d) {
+    const e = Store.data.active.exercises[+d.i];
+    for (let k = e.sets.length - 1; k >= 0; k--) if (e.sets[k].done && e.sets[k].g) { e.sets.splice(k, 1); break; }
     Store.save(); this.refreshSheet();
   },
   removeSet(el, d) { const e = Store.data.active.exercises[+d.i]; if (e.sets.length) e.sets.pop(); Store.save(); this.refreshSheet(); },

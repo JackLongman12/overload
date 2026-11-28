@@ -349,3 +349,44 @@ details summary { cursor: pointer; color: var(--acc); font-weight: 600; }
 .set-row.cols-4.ty-hang { grid-template-columns: 28px 0.6fr 0.95fr 1.05fr 0.85fr 0.7fr 34px; gap: 4px; }
 .set-row.ty-hang select { font-size: 13px; padding-left: 4px; padding-right: 0; }
 .seg-btn { text-align: center; justify-content: center; display: flex; align-items: center; }
+
+/* Today card: one clear answer to "what should I do?" */
+.today { border-left: 4px solid var(--acc); display: flex; flex-direction: column; gap: 8px; }
+.today-head { display: flex; gap: 10px; align-items: center; }
+.today-head b { font-size: 17px; }
+.today-ic { font-size: 26px; color: var(--acc); }
+.today-easy { border-left-color: var(--warn); } .today-easy .today-ic { color: var(--warn); }
+.today-rest { border-left-color: var(--bad); } .today-rest .today-ic { color: var(--bad); }
+.today-done { border-left-color: var(--ok); } .today-done .today-ic { color: var(--ok); }
+.today-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 2px; }
+.today-actions .btn { margin: 0; min-height: 46px; width: auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.today-actions .btn:only-child { grid-column: 1 / -1; }
+
+/* Ask the coach */
+.ask-intro { display: flex; gap: 12px; align-items: center; padding: 6px 2px 14px; }
+.ask-ic { font-size: 34px; color: var(--acc); }
+.msgs { display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 88%; padding: 10px 13px; border-radius: 16px; line-height: 1.45; overflow-wrap: anywhere; }
+.msg.me { align-self: flex-end; background: var(--acc); color: #fff; border-bottom-right-radius: 4px; }
+.msg.coach { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg-src { margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+.typing { display: flex; gap: 4px; padding: 14px 16px; }
+.typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
+.typing span:nth-child(2) { animation-delay: .2s; } .typing span:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.ask-topics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0 8px; }
+.ask-chip { display: flex; gap: 8px; align-items: center; min-height: 52px; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; font-size: 13.5px; line-height: 1.25; }
+.ask-chip .ti { color: var(--acc); font-size: 19px; flex: none; }
+.ask-chip:active { background: var(--card2); } .ask-chip:disabled { opacity: .5; }
+.ask-bar { display: flex; gap: 8px; padding: 10px 16px calc(10px + var(--sb)); border-top: 1px solid var(--line); background: var(--card); max-width: 640px; width: 100%; margin: 0 auto; }
+.ask-bar input { flex: 1; min-width: 0; height: 46px; border-radius: 23px; border: 1px solid var(--line); background: var(--bg); padding: 0 16px; }
+.ask-bar .icon-btn.primary { width: 46px; height: 46px; border-radius: 50%; background: var(--acc); color: #fff; flex: none; }
+
+/* Quick climb log */
+.qpad { background: var(--card2); border-radius: 12px; padding: 10px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.qpad-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.qpad .seg-btn { background: var(--card); gap: 4px; }
+.qpad .seg-btn.on { background: var(--acc); }
+.qgrades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.qgrade { min-height: 48px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); font-weight: 700; font-size: 16px; text-align: center; }
+.qgrade:active { background: var(--acc); color: #fff; }

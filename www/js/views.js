@@ -463,7 +463,7 @@ Object.assign(UI, {
     const w = Store.data.workouts.find(x => x.id === id); if (!w) return;
     this.openSheet('wdetail', esc(w.name), () => `
       <div class="muted sm">${fmtDate(w.start, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${fmtTime(w.start)}</div>
-      <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${Math.round(((w.end || w.start) - w.start) / 60000)} min</b></div><div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div><div class="stat"><div class="muted sm">Sets</div><b>${w.exercises.reduce((a, e) => a + e.sets.length, 0)}</b></div></div>
+      <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${Math.round(((w.end || w.start) - w.start) / 60000)} min</b></div>${workoutVolume(w) > 0 ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div>` : `<div class="stat"><div class="muted sm">${workoutStat(w).icon === 'mountain' ? 'Climbs' : 'Result'}</div><b class="sm">${esc(workoutStat(w).text)}</b></div>`}<div class="stat"><div class="muted sm">Sets</div><b>${w.exercises.reduce((a, e) => a + e.sets.length, 0)}</b></div></div>
       ${w.hr ? `<div class="card sm">${icon('heart')} Heart rate: ${w.hr.avg} bpm average, ${w.hr.max} max</div>` : ''}
       ${w.notes ? `<div class="card sm">${esc(w.notes)}</div>` : ''}
       ${w.exercises.map(e => { const ex = Store.ex(e.exId); let n = 0; return `<div class="card"><button class="ex-title" data-a="exDetail" data-id="${e.exId}">${esc(ex.name)}</button>${e.notes ? `<div class="sm muted">${esc(e.notes)}</div>` : ''}

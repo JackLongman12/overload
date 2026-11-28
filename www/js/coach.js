@@ -260,12 +260,21 @@ const Coach = {
     }
     const vol = this.weeklySets();
     const big = ['chest', 'lats', 'upper_back', 'shoulders', 'quads', 'hamstrings', 'glutes'];
-    const trainedAny = Object.keys(vol).length > 0;
+    const trainedAny = Object.keys(vol).length > 0 && liftsWeights(28);
     if (trainedAny) {
       big.forEach(m => { if ((vol[m] || 0) < 6) out.push({ icon: 'target', tone: 'accent', text: `${MUSCLES[m]}: ${Math.round(vol[m] || 0)} sets this week. 10–20 hard sets a week is a good range for growth.` }); });
       Object.entries(vol).forEach(([m, v]) => { if (v > 25 && MUSCLES[m]) out.push({ icon: 'flame', tone: 'warning', text: `${MUSCLES[m]}: ${Math.round(v)} sets this week. That's high, so watch recovery.` }); });
       const push = (vol.chest || 0) + (vol.shoulders || 0) * 0.5, pull = (vol.lats || 0) + (vol.upper_back || 0);
       if (push > 6 && pull < push * 0.7) out.push({ icon: 'scale', tone: 'warning', text: `Push volume (${Math.round(push)}) is well above pull (${Math.round(pull)}). Add rows or pull-ups to keep your shoulders healthy.` });
+    }
+    // Climbing: load spikes, finger streaks, limiters and stuck projects
+    if (Climb.climbs(28).length) {
+      const lr = Climb.loadRatio(), fd = Climb.fingerDays();
+      if (lr && lr.ratio > 1.5) out.push({ icon: 'alert-triangle', tone: 'warning', text: `Climbing load is ${lr.ratio}x your 4-week average. Big jumps are when finger injuries happen, so keep the next sessions moderate.` });
+      if (fd >= 3) out.push({ icon: 'hand-stop', tone: 'warning', text: `${fd} days in a row on your fingers. Take a rest day: pulleys recover slower than muscles.` });
+      const pr = Climb.profile();
+      pr.advice.filter(a => a.tone !== 'info' || /harder on/.test(a.text)).slice(0, 2).forEach(a => out.push({ icon: a.tone === 'warn' ? 'target' : 'mountain', tone: a.tone === 'warn' ? 'accent' : 'success', text: a.text }));
+      ['boulder', 'route'].forEach(cat => { const p = Climb.projects(cat).find(x => x.sessions >= 3); if (p) out.push({ icon: 'flag', tone: 'accent', text: `${p.g} project: ${p.sessions} sessions, best high point ${Math.round(p.best * 100)}%. Try it first while fresh, and work it in sections.` }); });
     }
     const goal = Store.data.settings.weekGoal;
     const thisWeek = ws.filter(w => w.start > startOfWeek()).length;

@@ -101,6 +101,7 @@ const UI = {
     const ci = Store.latestCheckin();
     const wk = d.workouts.filter(w => w.start > startOfWeek());
     const vol = wk.reduce((s, w) => s + workoutVolume(w), 0);
+    const wkClimbs = Climb.climbs(7).filter(c => c.date > startOfWeek()).length;
     const rec = Coach.recovery();
     const recList = Object.entries(rec).filter(([m]) => !['cardio', 'mobility', 'full_body'].includes(m));
     const hr = new Date().getHours();
@@ -109,7 +110,7 @@ const UI = {
     const needBackup = d.workouts.length >= 3 && Date.now() - Math.max(lastB, firstW) > 30 * 864e5;
     return `
     <div class="page-head"><div><div class="muted sm">${fmtDate(Date.now(), { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>${greet}${d.settings.name ? ', ' + esc(d.settings.name) : ''}</h1></div></div>
-    ${a ? `<button class="card accent-card" data-a="openWorkout">${icon('player-play')} <div><b>Resume ${esc(a.name)}</b><div class="sm">${a.exercises.length} exercises · started ${fmtTime(a.start)}</div></div></button>` : ''}
+    ${a ? `<button class="card accent-card" data-a="openWorkout">${icon('player-play')} <div><b>Resume ${esc(a.name)}</b><div class="sm">${a.exercises.length} exercises · started ${fmtTime(a.start)}</div></div></button>` : this.todayCard()}
     ${needBackup ? `<div class="card warn-card"><div class="row-between"><div><b>${icon('database-export')} Back up your training</b><div class="sm">${lastB ? 'Last backup ' + fmtDate(lastB, { day: 'numeric', month: 'short' }) : 'You haven\'t made a backup yet'}. Save a copy to Drive or email so a lost phone doesn't mean lost progress.</div></div><button class="btn sm primary" data-a="exportJSON">Back up</button></div></div>` : ''}
     <div class="card">
       <div class="row-between"><div><div class="muted sm">Readiness today</div>
@@ -136,7 +137,7 @@ const UI = {
     <div class="section-head"><h3>This week</h3></div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${wk.length}<span class="muted sm"> / ${d.settings.weekGoal}</span></b></div>
-      <div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(vol)}<span class="muted sm"> ${U()}</span></b></div>
+      ${vol > 0 || !wkClimbs ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(vol)}<span class="muted sm"> ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Climbs</div><b>${wkClimbs}</b></div>`}
       <div class="stat"><div class="muted sm">Time</div><b>${fmtDur(wk.reduce((s, w) => s + ((w.end || w.start) - w.start) / 1000, 0)).replace(/:\d\d$/, '')}<span class="muted sm"> h</span></b></div>
     </div>
     <div class="section-head"><h3>Muscle recovery</h3><span class="muted sm">estimated</span></div>
@@ -177,8 +178,10 @@ const UI = {
     for (let i = 7; i >= 0; i--) {
       const s = startOfWeek() - i * 7 * 864e5, e = s + 7 * 864e5;
       const inW = ws.filter(w => w.start >= s && w.start < e);
-      weeks.push({ l: fmtDate(s, { day: 'numeric', month: 'numeric' }), v: inW.reduce((a, w) => a + workoutVolume(w), 0), n: inW.length });
+      weeks.push({ l: fmtDate(s, { day: 'numeric', month: 'numeric' }), v: inW.reduce((a, w) => a + workoutVolume(w), 0), m: Math.round(inW.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0)), n: inW.length });
     }
+    const lifts = weeks.some(w => w.v > 0), totalMin = ws.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0);
+    if (!lifts) weeks.forEach(w => { w.v = w.m; });
     const since = Date.now() - 30 * 864e5, musc = {};
     ws.filter(w => w.start > since).forEach(w => w.exercises.forEach(e => { const ex = Store.ex(e.exId); musc[ex.muscle] = (musc[ex.muscle] || 0) + e.sets.filter(s => s.type !== 'W').length; }));
     const mList = Object.entries(musc).sort((a, b) => b[1] - a[1]);
@@ -186,25 +189,26 @@ const UI = {
     const prs = topLifts().slice(0, 8);
     return `
     <div class="page-head"><h1>Progress</h1></div>
-    <div class="section-head"><h3>${icon('sparkles')} Coach</h3></div>
+    <div class="section-head"><h3>${icon('sparkles')} Coach</h3><button class="link" data-a="ask">${icon('message-chatbot')} Ask</button></div>
     <div class="card">${(this._allIns ? ins : ins.slice(0, 4)).map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}${ins.length > 4 ? `<button class="link sm" data-a="toggleIns">${this._allIns ? 'Show less' : `Show all ${ins.length}`}</button>` : ''}<div class="sm muted" style="padding-top:8px">General guidance, not medical advice. <button class="link sm" data-a="disclaimer">Health and safety</button></div></div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${ws.length}</b></div>
       <div class="stat"><div class="muted sm">Week streak</div><b>${weekStreak()}</b></div>
-      <div class="stat"><div class="muted sm">Total volume</div><b>${fmtNum(ws.reduce((a, w) => a + workoutVolume(w), 0) / 1000)}<span class="muted sm">k ${U()}</span></b></div>
+      ${lifts ? `<div class="stat"><div class="muted sm">Total volume</div><b>${fmtNum(ws.reduce((a, w) => a + workoutVolume(w), 0) / 1000)}<span class="muted sm">k ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Training time</div><b>${fmtNum(Math.round(totalMin / 60))}<span class="muted sm"> h</span></b></div>`}
     </div>
-    <div class="card"><div class="row-between"><b>Weekly volume</b><span class="muted sm">${U()}</span></div>${barChart(weeks, { label: 'weekly volume', fmt: fmtNum })}</div>
+    ${Climb.climbs(365).length ? (() => { const b = Climb.stats('boulder', 90), r = Climb.stats('route', 90); return `<button class="card accent-card" data-a="climbStats">${icon('mountain')}<div><b>Climbing coach</b><div class="sm">${[b && b.max != null ? 'Boulder ' + Climb.label(b.max, 'boulder') : '', r && r.max != null ? 'Route ' + Climb.label(r.max, 'route') : ''].filter(Boolean).join(' · ') || 'Grade pyramid, flash grade, send rate'}</div></div></button>`; })() : ''}
+    <div class="card"><div class="row-between"><b>${lifts ? 'Weekly volume' : 'Weekly training time'}</b><span class="muted sm">${lifts ? U() : 'minutes'}</span></div>${barChart(weeks, { label: lifts ? 'weekly volume' : 'weekly minutes', fmt: fmtNum })}</div>
     <div class="card"><div class="row-between"><b>${this._mapMode === 'recovery' ? 'Recovery right now' : 'Muscles trained this week'}</b><button class="link sm" data-a="mapMode">${this._mapMode === 'recovery' ? 'Show sets' : 'Show recovery'}</button></div>
       ${this._mapMode === 'recovery' ? BodyMap.svg(Coach.recovery(), 'recovery') : BodyMap.svg(Coach.weeklySets(), 'sets')}
       ${BodyMap.legend(this._mapMode === 'recovery' ? 'recovery' : 'sets')}${this._mapMode === 'recovery' ? recoveryList() : ''}</div>
     <div class="card"><b>Consistency</b>${heatmap(ws)}</div>
     <div class="card"><b>Sets per muscle, last 30 days</b>
       ${mList.length ? mList.map(([m, v]) => `<div class="hbar"><span>${MUSCLES[m] || m}</span><div><div style="width:${v / mMax * 100}%"></div></div><span>${v}</span></div>`).join('') : '<div class="empty-chart">No data yet</div>'}</div>
-    ${Climb.climbs(365).length ? (() => { const b = Climb.stats('boulder', 90), r = Climb.stats('route', 90); return `<button class="card accent-card" data-a="climbStats">${icon('mountain')}<div><b>Climbing coach</b><div class="sm">${[b && b.max != null ? 'Boulder ' + Climb.label(b.max, 'boulder') : '', r && r.max != null ? 'Route ' + Climb.label(r.max, 'route') : ''].filter(Boolean).join(' · ') || 'Grade pyramid, flash grade, send rate'}</div></div></button>`; })() : ''}
-    <div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
-    ${prs.length ? `<div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : '<div class="empty">Personal records show up here.</div>'}
+    ${!prs.length && Climb.climbs(365).length ? '' : `<div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
+    ${prs.length ? `<div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : '<div class="empty">Personal records show up here.</div>'}`}
     <div class="section-head"><h3>${icon('award')} Achievements</h3><span class="muted sm">${Achievements.unlocked().size} of ${Achievements.LIST.length}</span></div>
-    <div class="badges">${(() => { const u = Achievements.unlocked(); return Achievements.LIST.map(([id, name, desc]) => `<div class="badge ${u.has(id) ? 'on' : ''}" title="${esc(desc)}">${icon(u.has(id) ? 'award' : 'lock')}<b>${esc(name)}</b><span>${esc(desc)}</span></div>`).join(''); })()}</div>
+    ${(() => { const u = Achievements.unlocked(), got = Achievements.LIST.filter(a => u.has(a[0])), next = Achievements.LIST.filter(a => !u.has(a[0])), show = this._allBadges ? got.concat(next) : got.concat(next.slice(0, 3));
+      return `<div class="badges">${show.map(([id, name, desc]) => `<div class="badge ${u.has(id) ? 'on' : ''}" title="${esc(desc)}">${icon(u.has(id) ? 'award' : 'lock')}<b>${esc(name)}</b><span>${esc(desc)}</span></div>`).join('')}</div>${next.length > 3 ? `<button class="link sm" data-a="toggleBadges">${this._allBadges ? 'Show less' : `Show all ${Achievements.LIST.length}`}</button>` : ''}`; })()}
     <div class="grid2" style="margin-top:12px"><button class="btn" data-a="report" data-id="30">${icon('file-type-pdf')} 30-day report</button><button class="btn" data-a="report" data-id="90">${icon('file-type-pdf')} 90-day report</button></div>
     <div class="section-head"><h3>History</h3><span class="muted sm">${ws.length} workouts</span></div>
     ${ws.slice(0, this._histN || 15).map(w => historyCard(w)).join('') || '<div class="empty">Finished workouts show up here.</div>'}
@@ -275,7 +279,7 @@ const UI = {
       ${Store.data.workouts.length < 3 && !Store.data.settings.hideLogTips ? `<div class="card tip-card sm"><b>${icon('info-circle')} How to log a workout</b>
         <ol><li>The grey numbers are what you did last time. Type what you actually do in each box.</li><li>Tap ${icon('check')} when you finish a set. The rest timer starts by itself.</li><li>The blue coach box says what to aim for today. Tap <b>Apply</b> to fill it in.</li><li>Tap an exercise name for how to do it.</li><li>Tap <b>Finish</b> at the top when you're done.</li></ol>
         <button class="link sm" data-a="hideLogTips">Got it, hide this</button></div>` : ''}
-      <div class="row muted sm wstats"><span>${icon('weight')} ${fmtNum(vol)} ${U()}</span><span>${icon('check')} ${done} sets</span>${a.readiness != null ? `<span>${icon('heart-rate-monitor')} readiness ${a.readiness}</span>` : ''}${BLE.hrDevice ? `<span class="hr">${icon('heart')} <span class="hrLive">${BLE.hr || '–'}</span> bpm</span>` : ''}</div>
+      <div class="row muted sm wstats">${vol > 0 || !a.exercises.some(e => Store.ex(e.exId).type === 'climb') ? `<span>${icon('weight')} ${fmtNum(vol)} ${U()}</span>` : (st => `<span>${icon(st.icon)} ${esc(st.text)}</span>`)(workoutStat(a))}<span>${icon('check')} ${done} sets</span>${a.readiness != null ? `<span>${icon('heart-rate-monitor')} readiness ${a.readiness}</span>` : ''}${BLE.hrDevice ? `<span class="hr">${icon('heart')} <span class="hrLive">${BLE.hr || '–'}</span> bpm</span>` : ''}</div>
       ${a.exercises.map((e, i) => this.exCard(e, i, a)).join('')}
       <button class="btn wide primary-ghost" data-a="addExercise">${icon('plus')} Add exercise</button>
       <button class="btn wide danger-ghost" data-a="discardWorkout">${icon('trash')} Discard workout</button>
@@ -312,6 +316,7 @@ const UI = {
         <div class="coach-btns">${sug.sets && sug.sets.length && sug.kind !== 'new' ? `<button class="btn sm" data-a="applySug" data-i="${i}">${icon('wand')} Apply</button>` : ''}
         ${sug.nextEx ? `<button class="btn sm" data-a="swapEx" data-i="${i}" data-id="${sug.nextEx}">${icon('arrow-up-right')} Switch to ${esc(Store.ex(sug.nextEx).name)}</button>` : ''}</div>
       </div>
+      ${ex.type === 'climb' ? quickClimbPad(ex, e, i) : ''}
       <div class="set-row head cols-${cols.length} ty-${ex.type}"><span>Set</span><span>Previous</span>${cols.map(c => `<span>${colLabel(c, ex)}</span>`).join('')}<span>${icon('check')}</span></div>
       ${rows}
       <div class="row-between ex-foot">
@@ -587,6 +592,22 @@ function readinessScore(c) {
   if (c.sleepAvg != null) s -= c.sleepAvg < 5.5 ? 6 : c.sleepAvg < 6.5 ? 3 : 0;
   return Math.max(0, Math.min(100, Math.round(s)));
 }
+// One-tap climb logging: pick how it went once, then tap a grade per climb
+const QUICK_RESULTS = [['flash', 'Flash', 'bolt'], ['sent', 'Sent', 'check'], ['p50', 'Fell', 'arrow-down']];
+function quickGrades(ex) {
+  const cat = Climb.cat(ex), list = Climb.grades(cat).filter(g => Climb.value(g, cat) >= 0);
+  const st = Climb.stats(cat, 120), base = st && st.max != null ? Climb.label(st.max, cat) : (cat === 'boulder' ? Climb.label(3, cat) : Climb.label(Climb.value('5.10a', 'route'), cat));
+  const k = Math.max(0, list.indexOf(base)), from = Math.max(0, Math.min(k - 4, list.length - 8));
+  return list.slice(from, from + 8);
+}
+function quickClimbPad(ex, e, i) {
+  const qr = e.qr || 'sent', logged = e.sets.filter(s => s.done && s.g);
+  return `<div class="qpad"><div class="qpad-head sm"><b>Quick log</b><span class="muted">${logged.length ? `${logged.length} logged · tap a grade for each climb` : 'Pick how it went, then tap the grade'}</span></div>
+    <div class="seg">${QUICK_RESULTS.map(([v, l, ic]) => `<button class="seg-btn ${qr === v ? 'on' : ''}" data-a="quickRes" data-i="${i}" data-id="${v}" aria-pressed="${qr === v}">${icon(ic)} ${l}</button>`).join('')}</div>
+    <div class="qgrades">${quickGrades(ex).map(g => `<button class="qgrade" data-a="quickClimb" data-i="${i}" data-id="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+    ${logged.length ? `<button class="link sm" data-a="quickUndo" data-i="${i}">${icon('arrow-back-up')} Undo last</button>` : ''}</div>`;
+}
+
 function readinessLabel(s) { return s >= 85 ? 'Primed. A good day to push for PRs.' : s >= 65 ? 'Good to train as planned.' : s >= 45 ? 'A bit flat. Stick to the plan, no heroics.' : 'Low. The coach will lighten today\'s targets.'; }
 
 function warmupSets(work) {
@@ -673,14 +694,14 @@ function historyCard(w) {
   const mins = Math.round(((w.end || w.start) - w.start) / 60000);
   return `<button class="card hist" data-a="workoutDetail" data-id="${w.id}">
     <div class="row-between"><b>${esc(w.name)}</b><span class="sm muted">${fmtDate(w.start)}</span></div>
-    <div class="sm muted row wstats"><span>${icon('clock')} ${mins} min</span><span>${icon('weight')} ${fmtNum(workoutVolume(w))} ${U()}</span>${w.prs ? `<span class="acc">${icon('trophy')} ${w.prs} PR</span>` : ''}${w.hr ? `<span>${icon('heart')} ${w.hr.avg} avg</span>` : ''}${w.imported ? `<span>${icon('file-import')} ${esc(w.imported)}</span>` : ''}</div>
+    <div class="sm muted row wstats"><span>${icon('clock')} ${mins} min</span>${(st => `<span>${icon(st.icon)} ${esc(st.text)}</span>`)(workoutStat(w))}${w.prs ? `<span class="acc">${icon('trophy')} ${w.prs} PR</span>` : ''}${w.hr ? `<span>${icon('heart')} ${w.hr.avg} avg</span>` : ''}${w.imported ? `<span>${icon('file-import')} ${esc(w.imported)}</span>` : ''}</div>
     <div class="sm clamp">${w.exercises.map(e => `${e.sets.length}× ${esc(Store.ex(e.exId).name)}`).join(' · ')}</div></button>`;
 }
 function summaryBody(w, prs) {
   const mins = Math.round((w.end - w.start) / 60000);
   const sets = w.exercises.reduce((s, e) => s + e.sets.length, 0);
   return `<div class="celebrate">${icon('trophy')}<h2>Nice work</h2><div class="muted">${esc(w.name)} · ${fmtDate(w.start)}</div></div>
-    <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${mins} min</b></div><div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div><div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div></div>
+    <div class="stats3"><div class="stat"><div class="muted sm">Duration</div><b>${mins} min</b></div>${workoutVolume(w) > 0 ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(workoutVolume(w))}</b></div>` : `<div class="stat"><div class="muted sm">${workoutStat(w).icon === 'mountain' ? 'Climbs' : 'Result'}</div><b class="sm">${esc(workoutStat(w).text)}</b></div>`}<div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div></div>
     ${w.badges && w.badges.length ? `<div class="card accent-card col"><b>${icon('award')} Achievement${w.badges.length > 1 ? 's' : ''} unlocked</b><div class="sm">${w.badges.map(esc).join(' · ')}</div></div>` : ''}
     ${prs.length ? `<div class="card"><b>${icon('trophy')} New records</b>${prs.map(p => `<div class="li static"><span>${esc(p.ex)}<span class="sm muted"> · ${p.what}</span></span><b>${esc(p.val)}</b></div>`).join('')}</div>` : ''}
     <div class="card"><b>${icon('sparkles')} Next session plan</b>${w.exercises.map(e => { const s = Coach.suggest(e.exId, e.target); return `<div class="li static col"><span><b>${esc(Store.ex(e.exId).name)}</b>: ${esc(s.title)}</span><span class="sm muted">${esc(s.text)}</span></div>`; }).join('')}</div>

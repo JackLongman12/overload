@@ -97,6 +97,9 @@ node scripts/serve.mjs
 ```
 Then open http://localhost:5173.
 
+## Ask the coach and Gemini Nano
+The chat answers six common questions (today, progress, stuck, recovery, climbing, this week) from the app's own coach, offline, on every phone. On phones with Gemini Nano in Android AICore (Galaxy S25/S26, Pixel 9 and newer, and others), it also takes free-form questions: the app sends Nano a prompt with facts from your log and the built-in coach's answer, and Nano writes the reply on the device. Nothing leaves the phone. The Prompt API is in beta, and Android only allows it while the app is on screen.
+
 ## Code map
 | File | What it does |
 |---|---|
@@ -108,4 +111,6 @@ Then open http://localhost:5173.
 | `www/js/store.js` | Local data and native file mirror |
 | `www/js/importers.js` | Hevy, Strong, FitNotes, GPX, TCX import; CSV and JSON export |
 | `www/js/updater.js` | Content and APK auto-update |
+| `www/js/ask.js` | Today card and the Ask the coach chat (built-in answers, plus on-device Gemini Nano when the phone has it) |
+| `android/.../NanoPlugin.java` | Gemini Nano bridge (ML Kit GenAI Prompt API on AICore). Phones without it report unavailable |
 | `www/js/app.js`, `actions.js`, `views.js` | Screens and interactions |

@@ -11,8 +11,8 @@ android {
         applicationId "com.overload.gym"
         minSdkVersion 30
         targetSdkVersion 34
-        versionCode 100008
-        versionName "2.1.0"
+        versionCode 100009
+        versionName "2.2.0"
     }
     signingConfigs {
         release {

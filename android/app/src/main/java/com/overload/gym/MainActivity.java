@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(WidgetBridgePlugin.class);
         registerPlugin(WearBridgePlugin.class);
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(NanoPlugin.class);
         super.onCreate(savedInstanceState);
         // The page scrolls inside its own panels; the WebView's own scrollbar only showed up as a stray bar
         if (getBridge() != null && getBridge().getWebView() != null) {
