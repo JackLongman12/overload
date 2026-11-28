@@ -70,3 +70,19 @@ test('an APK without the installer falls back to a one-time download', async () 
   await app.Updater.check(false);
   assert.equal(app.Updater.apkState, 'manual');
 });
+
+test('an optional APK never puts up a bar or sends you out of the app', async () => {
+  const app = await fresh(); phone(app, { canInstall: false, silent: false });
+  let banner = '';
+  const el = { set innerHTML(v) { banner += v; }, get innerHTML() { return banner; } };
+  app.ctx.document.querySelector = s => (s === '#updbar' ? el : { innerHTML: '' });
+  await app.Updater.init(); feedFetch(app);
+  await app.Updater.check(false);
+  assert.equal(app.Updater.state, 'ready', 'content updates quietly');
+  app.UI.renderBanner();
+  assert.equal(banner, '');
+  delete app.ctx.Capacitor.Plugins.AppUpdate;
+  app.Updater.apkState = ''; await app.Updater.check(false);
+  app.UI.renderBanner();
+  assert.ok(!/Download/.test(banner));
+});

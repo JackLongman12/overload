@@ -381,3 +381,5 @@ details summary { cursor: pointer; color: var(--acc); font-weight: 600; }
 .tile .sm { font-size: 11px; line-height: 1.25; }
 .row-card { display: flex; gap: 12px; align-items: center; text-align: left; width: 100%; }
 .row-card .ti { font-size: 26px; color: var(--acc); }
+.tile-btn.dash { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; min-height: 96px; margin: 0; }
+.tile-btn.dash .ti { font-size: 24px; color: var(--acc); }

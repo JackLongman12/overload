@@ -169,7 +169,7 @@ const Ask = {
       if (pp) lines.push(`Pull-up one-rep max: ${pp}% of body weight.`);
       lines.push(fd >= 3 ? `${fd} days in a row on your fingers. Take a rest day: pulleys recover slower than muscles.` : fd ? `${fd} day(s) in a row on your fingers.` : 'Fingers are rested.');
       const ph = Climb.phase(); if (ph) lines.push(`Plan phase: ${ph.name} (week ${ph.week} of 4). ${ph.desc}`);
-      else lines.push('• Build a climbing plan in Train, Plans for 4-week phases with hangboard work.');
+      else lines.push('• Build a climbing plan (Workout, Explore plans) for 4-week phases with hangboard work.');
       return lines.join('\n');
     }
     return this.local('today');
@@ -226,7 +226,7 @@ Object.assign(UI, {
     return `<div class="card today today-${tone}"><div class="today-head">${icon(ic, 'today-ic')}<div><div class="muted sm">Today</div><b>${esc(t.title)}</b></div></div>
       <div class="sm">${esc(t.text)}</div>
       <div class="today-meta sm"><span>${icon('heart-rate-monitor')} ${t.score != null ? `Readiness ${t.score}` : 'No check-in yet'}</span>${(() => { const b = Plan.block(); return !b ? '' : b.done ? `<span>${icon('trophy')} ${esc(b.name)} block done</span>` : `<span>${icon('calendar-stats')} ${esc(b.name)} ${b.week}/${b.total} · ${esc(b.label)}</span>`; })()}<button class="link sm" data-a="checkin">${t.score != null ? 'Redo' : 'Check in'}</button></div>
-      <div class="today-actions">${btn}<button class="btn" data-a="ask">${icon('message-chatbot')} Coach</button></div></div>`;
+      ${btn ? `<div class="today-actions">${btn}</div>` : ''}</div>`;
   },
 
   openAsk(topic) {

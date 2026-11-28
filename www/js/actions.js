@@ -7,7 +7,13 @@ const Actions = {
   openApk() { Updater.openApk(); },
   allowUpdates() { Updater.installApk(true); },
   installUpdate() { Updater.installApk(true); },
-  moreHistory() { this._histN = (this._histN || 15) + 30; this.render(); },
+  moreHistory() { this._histN = (this._histN || 10) + 20; this.render(); },
+  moreHistoryAll() { this._histAll = (this._histAll || 30) + 30; this.refreshSheet(); },
+  stats() { this.openStats(); },
+  history() { this.openHistory(); },
+  body() { this.openBody(); },
+  exercises() { this.openExercises(); },
+  timers() { this.openTimers(); },
 
   // ----- Starting workouts
   startEmpty() { this.beginWorkout(() => this.newWorkout('Workout')); },
@@ -56,7 +62,7 @@ const Actions = {
   addProgram(el, d) {
     const p = PROGRAMS.find(x => x.id === d.id);
     p.routines.forEach(([name, exs]) => Store.data.routines.push({ id: uid(), name, program: p.name, exercises: exs.map(([exId, sets, repMin, repMax]) => ({ exId, sets, repMin, repMax, rest: Store.ex(exId).type === 'dist' ? 0 : (repMax <= 8 ? 180 : Store.data.settings.rest) })) }));
-    Store.save(true); this.closeSheet(); this.nav('home'); toast(`Added ${p.routines.length} routines from ${p.name}`);
+    Store.save(true); this.closeSheet(); this.nav('workout'); toast(`Added ${p.routines.length} routines from ${p.name}`);
   },
   saveAsRoutine(el, d) {
     const w = Store.data.workouts.find(x => x.id === d.id); if (!w) return;
@@ -162,9 +168,9 @@ const Actions = {
     old.forEach(r => Store.tombstone(r.id)); Store.data.routines = Store.data.routines.filter(r => !old.includes(r));
     p.routines.forEach(([name, exs]) => Store.data.routines.push({ id: uid(), name, program: p.name, exercises: exs.map(([exId, sets, repMin, repMax]) => { const ex = Store.ex(exId); return { exId, sets, repMin, repMax, rest: ex.type === 'climb' ? 0 : ex.type === 'hang' ? 180 : repMax <= 8 ? 180 : Store.data.settings.rest }; }) }));
     Store.data.settings.climbPlan = { ...o, start: startOfWeek() };
-    Store.save(true); this.closeSheet(); this.refreshSheet(); toast(`Plan started: ${p.routines.length} routines added to Home`);
+    Store.save(true); this.closeSheet(); this.refreshSheet(); toast(`Plan started: ${p.routines.length} routines added to the Workout tab`);
   },
-  climbPlanEnd() { if (!confirm('End your climbing plan? Its routines stay on Home.')) return; delete Store.data.settings.climbPlan; Store.save(true); this.refreshSheet(); },
+  climbPlanEnd() { if (!confirm('End your climbing plan? Its routines stay on the Workout tab.')) return; delete Store.data.settings.climbPlan; Store.save(true); this.refreshSheet(); },
   programDetail(el, d) { this.openProgramDetail(d.id); },
   pickGroup(el, d) { this.pick.grp = d.id; const l = $('#pickList'); if (l) l.innerHTML = this.pickList(); const b = document.querySelector('.sheet-body'); if (b) b.scrollTop = 0; },
   discGroup(el, d) { this.disc = { ...(this.disc || { q: '' }), grp: d.id }; this.refreshSheet(); },
@@ -198,7 +204,6 @@ const Actions = {
   discipline(el, d) { this.openDiscipline(d.id); },
   quickStart(el, d) { this.stack = []; this.beginWorkout(() => { this.newWorkout(Store.ex(d.id).name); Store.data.active.exercises.push(this.makeWorkoutEx(d.id)); Store.save(); this.refreshSheet(); }); },
   ladder(el, d) { this.openLadder(d.id); },
-  timerGroup(el, d) { this.openTimerGroup(d.id); },
   timerSetup(el, d) { this.openTimerSetup(d.id); },
   timerStart() { this.startTimer(); },
   timerPause() { Timer.pause(); },
@@ -226,7 +231,7 @@ const Actions = {
   deleteMeasure(el, d) { Store.tombstone(d.id); Store.data.measurements = Store.data.measurements.filter(m => m.id !== d.id); Store.save(true); this.refreshSheet(); },
   async addPhoto(el) {
     const f = el.files && el.files[0]; if (!f) return;
-    try { const src = await resizeImage(f, 1080); if (await Photos.add(src)) { toast('Photo added'); this.render(); } }
+    try { const src = await resizeImage(f, 1080); if (await Photos.add(src)) { toast('Photo added'); this.render(); this.refreshSheet(); } }
     catch (e) { toast('Couldn\'t read that image'); }
   },
   viewPhoto(el, d) {
@@ -245,7 +250,7 @@ const Actions = {
     const c = JSON.parse(JSON.stringify(this.draft)); c.id = uid(); c.name = this.draft.name + ' (copy)'; c.u = Date.now();
     Store.data.routines.push(c); Store.save(true); this.closeSheet(); this.editRoutine(c); toast('Routine duplicated');
   },
-  mapMode() { this._mapMode = this._mapMode === 'recovery' ? 'sets' : 'recovery'; this.render(); },
+  mapMode() { this._mapMode = this._mapMode === 'recovery' ? 'sets' : 'recovery'; this.refreshSheet(); },
   async shareWorkout(el, d) { const w = Store.data.workouts.find(x => x.id === d.id); if (w) await ShareImage.share(w); },
   async report(el, d) { toast('Building your report…'); await Report.share(+d.id); },
   toggleReminder(el, d) {
@@ -284,7 +289,7 @@ const Actions = {
   builderAdd() {
     const p = this.bplan; if (!p) return;
     p.routines.forEach(r => Store.data.routines.push({ id: uid(), name: r.name, program: p.name, u: Date.now(), exercises: r.exercises }));
-    Store.save(true); this.stack = []; this.renderSheets(); this.nav('home'); toast(`Added ${p.routines.length} routines`);
+    Store.save(true); this.stack = []; this.renderSheets(); this.nav('workout'); toast(`Added ${p.routines.length} routines`);
   },
 
   // ----- Devices

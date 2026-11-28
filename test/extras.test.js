@@ -31,3 +31,14 @@ test('body map renders and highlights an exercise\'s muscles', async () => {
   assert.ok((svg.match(/bm-3/g) || []).length >= 1);
   assert.ok((svg.match(/bm-1/g) || []).length >= 1);
 });
+
+test('three tabs like Hevy: Home feed, Workout, Profile dashboard', async () => {
+  const { fresh, session } = require('./harness');
+  const app = await fresh();
+  session(app, 'bench_press_barbell', 1, [[60, 5]]);
+  assert.ok(!app.UI.tab_train && !app.UI.tab_progress && !app.UI.tab_you);
+  assert.match(app.UI.tab_home(), /Recent workouts/);
+  assert.match(app.UI.tab_workout(), /Start empty workout[\s\S]*New routine[\s\S]*Explore plans/);
+  const p = app.UI.tab_profile();
+  ['Statistics', 'Exercises', 'Measures', 'History', 'Achievements', 'Backup and sync', 'Settings'].forEach(x => assert.match(p, new RegExp(x)));
+});

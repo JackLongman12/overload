@@ -55,8 +55,10 @@ const UI = {
     } else el.innerHTML = '';
     const u = Updater.state, ap = Updater.apkState;
     const ub = $('#updbar');
-    // Updates install by themselves; only show a bar when one tap is needed
-    if (ap === 'permission') ub.innerHTML = `<div class="updbar">${icon('shield-check')} Allow automatic updates (one time) <button class="btn sm primary" data-a="allowUpdates">Allow</button></div>`;
+    // Updates install by themselves. A bar only shows when new content can't run without the new app
+    // version (state 'apk'); everything else updates quietly or waits in Settings
+    if (u !== 'apk' && u !== 'web') ub.innerHTML = '';
+    else if (ap === 'permission') ub.innerHTML = `<div class="updbar">${icon('shield-check')} Allow automatic updates (one time) <button class="btn sm primary" data-a="allowUpdates">Allow</button></div>`;
     else if (ap === 'tap' || (ap === 'ready' && Updater.apkStatus && !Updater.apkStatus.silent)) ub.innerHTML = `<div class="updbar">${icon('download')} Update ready <button class="btn sm primary" data-a="installUpdate">Install</button></div>`;
     else if (ap === 'manual' && u === 'apk') ub.innerHTML = `<div class="updbar">${icon('brand-android')} Install this update once to turn on automatic updates <button class="btn sm primary" data-a="openApk">Download</button></div>`;
     else if (u === 'web') ub.innerHTML = `<div class="updbar">${icon('refresh')} New version ${esc(Updater.info.version)} <button class="btn sm primary" data-a="applyUpdate">Reload</button></div>`;
@@ -97,24 +99,46 @@ const UI = {
     this.renderBanner();
   },
 
-  // ---------- Tabs
+  // ---------- Tabs: Home (feed), Workout, Profile
   tab_home() {
-    const d = Store.data, a = d.active;
+    const d = Store.data, a = d.active, ws = Store.workoutsSorted();
     const wk = d.workouts.filter(w => w.start > startOfWeek());
     const vol = wk.reduce((s, w) => s + workoutVolume(w), 0), sets = wk.reduce((s, w) => s + w.exercises.reduce((b, e) => b + e.sets.length, 0), 0);
     const hr = new Date().getHours();
     const greet = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
     const lastB = d.settings.lastBackup || 0, firstW = d.workouts.length ? Math.min(...d.workouts.map(w => w.start)) : Date.now();
     const needBackup = !(Sync.acct && Sync.acct.token) && d.workouts.length >= 3 && Date.now() - Math.max(lastB, firstW) > 30 * 864e5;
+    const ins = ws.length ? Coach.insights() : [];
+    const n = this._histN || 10;
     return `
     <div class="page-head"><div><div class="muted sm">${fmtDate(Date.now(), { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>${greet}</h1></div></div>
     ${a ? `<button class="card accent-card" data-a="openWorkout">${icon('player-play')} <div><b>Resume ${esc(a.name)}</b><div class="sm">${a.exercises.length} exercises · started ${fmtTime(a.start)}</div></div></button>` : this.todayCard()}
     ${needBackup ? `<button class="card warn-card" data-a="dataSheet">${icon('database-export')} <div><b>Back up your training</b><div class="sm">${lastB ? 'Last backup ' + fmtDate(lastB, { day: 'numeric', month: 'short' }) : 'No backup yet'}. Tap to save a copy or turn on sync.</div></div></button>` : ''}
-    <div class="grid2">
-      <button class="btn big-btn primary" data-a="startEmpty">${icon('plus')} Empty workout</button>
-      <button class="btn big-btn" data-a="programs">${icon('books')} Plans</button>
+    ${ins.length ? `<div class="section-head"><h3>${icon('sparkles')} Coach</h3><button class="link" data-a="ask">Open coach</button></div>
+    <div class="card">${ins.slice(0, 2).map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}</div>` : ''}
+    <div class="section-head"><h3>This week</h3></div>
+    <div class="stats3">
+      <div class="stat"><div class="muted sm">Workouts</div><b>${wk.length}<span class="muted sm"> / ${d.settings.weekGoal}</span></b></div>
+      ${vol > 0 ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(vol)}<span class="muted sm"> ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div>`}
+      <div class="stat"><div class="muted sm">Time</div><b>${fmtDur(wk.reduce((s, w) => s + ((w.end || w.start) - w.start) / 1000, 0)).replace(/:\d\d$/, '')}<span class="muted sm"> h</span></b></div>
     </div>
-    <div class="section-head"><h3>Routines</h3><button class="link" data-a="newRoutine">${icon('plus')} New</button></div>
+    <div class="section-head"><h3>Recent workouts</h3>${ws.length ? `<span class="muted sm">${ws.length} in total</span>` : ''}</div>
+    ${ws.slice(0, n).map(w => historyCard(w)).join('') || `<div class="empty">Your finished workouts show up here. Start one from the Workout tab.</div>`}
+    ${ws.length > n ? `<button class="btn wide" data-a="moreHistory">Show more</button>` : ''}
+    <div style="height:20px"></div>`;
+  },
+
+  tab_workout() {
+    const d = Store.data;
+    return `
+    <div class="page-head"><h1>Workout</h1></div>
+    <div class="section-head"><h3>Quick start</h3></div>
+    <button class="btn wide big-btn primary" data-a="startEmpty">${icon('plus')} Start empty workout</button>
+    <div class="section-head"><h3>Routines</h3></div>
+    <div class="grid2">
+      <button class="btn big-btn" data-a="newRoutine">${icon('clipboard-plus')} New routine</button>
+      <button class="btn big-btn" data-a="programs">${icon('books')} Explore plans</button>
+    </div>
     ${d.routines.length ? routineGroups(d).map(g => `
       ${g.name ? `<div class="group-head sm muted">${icon('books')} ${esc(g.name)}</div>` : '<div class="group-head sm muted">My routines</div>'}
       ${g.routines.map(r => `
@@ -122,85 +146,40 @@ const UI = {
         <div class="routine-main" data-a="editRoutine" data-id="${r.id}"><b>${esc(r.name)}</b>${r.id === g.next ? ' <span class="tag-next">Next</span>' : ''}
         <div class="sm muted clamp">${r.exercises.map(e => esc(Store.ex(e.exId).name)).join(', ') || 'No exercises'}</div></div>
         <button class="btn primary sm" data-a="startRoutine" data-id="${r.id}">Start</button>
-      </div>`).join('')}`).join('') : `<div class="empty">Create a routine or add a plan. Routines are unlimited and free.</div>`}
-    <div class="section-head"><h3>This week</h3></div>
-    <div class="stats3">
-      <div class="stat"><div class="muted sm">Workouts</div><b>${wk.length}<span class="muted sm"> / ${d.settings.weekGoal}</span></b></div>
-      ${vol > 0 ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(vol)}<span class="muted sm"> ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Sets</div><b>${sets}</b></div>`}
-      <div class="stat"><div class="muted sm">Time</div><b>${fmtDur(wk.reduce((s, w) => s + ((w.end || w.start) - w.start) / 1000, 0)).replace(/:\d\d$/, '')}<span class="muted sm"> h</span></b></div>
+      </div>`).join('')}`).join('') : `<div class="empty">No routines yet. Make one, or tap Explore plans for ready-made programs. Routines are unlimited and free.</div>`}
+    <div class="section-head"><h3>Tools</h3></div>
+    <div class="card list">
+      <button class="li" data-a="timers">${icon('clock-play')}<span class="grow left"><b>Timers</b><span class="sm muted">Intervals, rounds and hangboard</span></span>${icon('chevron-right', 'muted')}</button>
+      <button class="li" data-a="calculators">${icon('calculator')}<span class="grow left"><b>Calculators</b><span class="sm muted">1RM, RPE chart, strength level</span></span>${icon('chevron-right', 'muted')}</button>
     </div>
     <div style="height:20px"></div>`;
   },
 
-  tab_train() {
+  tab_profile() {
+    const ws = Store.workoutsSorted(), lifts = ws.some(w => workoutVolume(w) > 0);
+    const totalMin = ws.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0);
+    const f = Climb.fingers(), climbs = f || Climb.climbSessions();
+    const tile = (a, ic, name, sub) => `<button class="card tile-btn dash" data-a="${a}">${icon(ic)}<b>${name}</b><span class="sm muted">${sub}</span></button>`;
     return `
-    <div class="page-head"><h1>Train</h1></div>
-    <button class="card accent-card" data-a="programs">${icon('books')}<div><b>Plans</b><div class="sm">Ready-made programs, build your own, training blocks and the climbing plan</div></div></button>
-    <div class="section-head"><h3>Exercises</h3><button class="link" data-a="allExercises">All ${Store.allExercises().length}</button></div>
-    <div class="grid2">${TRAIN_DISCIPLINES.map(k => { const v = DISCIPLINES[k]; return `
-      <button class="card disc" data-a="discipline" data-id="${k}">${icon(v.icon, 'disc-ic')}<b>${v.name}</b><span class="sm muted">${v.desc}</span></button>`; }).join('')}</div>
-    <div class="section-head"><h3>Timers</h3></div>
-    <div class="grid3">${Object.entries(TIMER_GROUPS).map(([k, g]) => `
-      <button class="card tile" data-a="timerGroup" data-id="${k}">${icon(g.icon)}<b>${g.name}</b><span class="sm muted">${g.desc}</span></button>`).join('')}</div>
-    <div class="section-head"><h3>Tools</h3></div>
-    <button class="card accent-card" data-a="calculators">${icon('calculator')}<div><b>Calculators</b><div class="sm">1RM, RPE chart, strength level, bodyweight strength</div></div></button>
-    <div style="height:20px"></div>`;
-  },
-
-  tab_progress() {
-    const ws = Store.workoutsSorted();
-    const ins = Coach.insights();
-    const weeks = [];
-    for (let i = 7; i >= 0; i--) {
-      const s = startOfWeek() - i * 7 * 864e5, e = s + 7 * 864e5;
-      const inW = ws.filter(w => w.start >= s && w.start < e);
-      weeks.push({ l: fmtDate(s, { day: 'numeric', month: 'numeric' }), v: inW.reduce((a, w) => a + workoutVolume(w), 0), m: Math.round(inW.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0)), n: inW.length });
-    }
-    const lifts = weeks.some(w => w.v > 0), totalMin = ws.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0);
-    if (!lifts) weeks.forEach(w => { w.v = w.m; });
-    const prs = topLifts().slice(0, 8);
-    const f = Climb.fingers(), u = Achievements.unlocked().size;
-    return `
-    <div class="page-head"><h1>Progress</h1></div>
-    <div class="section-head"><h3>${icon('sparkles')} Coach</h3><button class="link" data-a="ask">${icon('message-chatbot')} Open coach</button></div>
-    <div class="card">${ins.slice(0, 2).map(i => `<div class="insight ${i.tone}" ${i.exId ? `data-a="exDetail" data-id="${i.exId}"` : ''}>${icon(i.icon)}<span>${esc(i.text)}</span></div>`).join('')}${ins.length > 2 ? `<button class="link sm" data-a="ask">${ins.length - 2} more in the coach</button>` : ''}</div>
+    <div class="page-head"><h1>Profile</h1></div>
     <div class="stats3">
       <div class="stat"><div class="muted sm">Workouts</div><b>${ws.length}</b></div>
       <div class="stat"><div class="muted sm">Week streak</div><b>${weekStreak()}</b></div>
-      ${lifts ? `<div class="stat"><div class="muted sm">Total volume</div><b>${fmtNum(ws.reduce((a, w) => a + workoutVolume(w), 0) / 1000)}<span class="muted sm">k ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Training time</div><b>${Math.round(totalMin / 60)}<span class="muted sm"> h</span></b></div>`}
+      ${lifts ? `<div class="stat"><div class="muted sm">Volume</div><b>${fmtNum(ws.reduce((a, w) => a + workoutVolume(w), 0) / 1000)}<span class="muted sm">k ${U()}</span></b></div>` : `<div class="stat"><div class="muted sm">Time</div><b>${Math.round(totalMin / 60)}<span class="muted sm"> h</span></b></div>`}
     </div>
-    ${f || Climb.climbSessions() ? `<button class="card accent-card" data-a="climbStats">${icon('hand-grab')}<div><b>Climbing strength</b><div class="sm">${f && f.hang ? `Strongest hang ${f.hang.pct}% of body weight` : 'Finger strength, hangboard progress and the climbing plan'}</div></div></button>` : ''}
-    <div class="card"><div class="row-between"><b>${lifts ? 'Weekly volume' : 'Weekly training time'}</b><span class="muted sm">${lifts ? U() : 'minutes'}</span></div>${barChart(weeks, { label: lifts ? 'weekly volume' : 'weekly minutes', fmt: fmtNum })}</div>
-    <div class="card"><div class="row-between"><b>${this._mapMode === 'recovery' ? 'Recovery right now' : 'Muscles trained this week'}</b><button class="link sm" data-a="mapMode">${this._mapMode === 'recovery' ? 'Show sets' : 'Show recovery'}</button></div>
-      ${this._mapMode === 'recovery' ? BodyMap.svg(Coach.recovery(), 'recovery') : BodyMap.svg(Coach.weeklySets(), 'sets')}
-      ${BodyMap.legend(this._mapMode === 'recovery' ? 'recovery' : 'sets')}${this._mapMode === 'recovery' ? recoveryList() : ''}</div>
-    ${prs.length ? `<div class="section-head"><h3>Best lifts</h3><button class="link" data-a="allExercises">All exercises</button></div>
-    <div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : ''}
-    <div class="section-head"><h3>History</h3><span class="muted sm">${ws.length} workouts</span></div>
-    ${ws.slice(0, this._histN || 15).map(w => historyCard(w)).join('') || '<div class="empty">Finished workouts show up here.</div>'}
-    ${ws.length > (this._histN || 15) ? `<button class="btn wide" data-a="moreHistory">Show more</button>` : ''}
-    ${ws.length ? `<button class="btn wide" data-a="report" data-id="30">${icon('file-type-pdf')} Share a 30-day report (PDF)</button>` : ''}
-    <div class="card list"><button class="li" data-a="badges">${icon('award')}<span>Achievements</span><span class="muted sm">${u} of ${Achievements.LIST.length}</span>${icon('chevron-right', 'muted')}</button></div>
-    <div style="height:20px"></div>`;
-  },
-
-  tab_you() {
-    const d = Store.data, m = d.measurements.slice().sort((a, b) => a.date - b.date);
-    const lastM = m[m.length - 1];
-    const bw = m.filter(x => x.weight).map(x => ({ x: x.date, y: +x.weight }));
-    return `
-    <div class="page-head"><h1>You</h1></div>
-    <div class="card"><div class="row-between"><b>Body weight</b><button class="btn sm" data-a="addMeasure">${icon('plus')} Log</button></div>
-      ${lastM ? `<div class="big">${fmtW(lastM.weight || '–')} <span class="muted sm">${U()}${lastM.bodyfat ? ' · ' + lastM.bodyfat + '% body fat' : ''}</span></div>` : ''}
-      ${lineChart(bw, { label: 'body weight' })}
-      <button class="link" data-a="measureList">All measurements</button></div>
-    <div class="card"><div class="row-between"><b>Progress photos</b><label class="btn sm">${icon('camera')} Add<input type="file" accept="image/*" data-a-change="addPhoto" hidden></label></div>
-      <div class="photos">${Store.photos.slice().reverse().slice(0, 9).map(p => `<button data-a="viewPhoto" data-id="${p.id}"><img src="${Photos.src(p)}" alt="Progress photo, ${fmtDate(p.date)}"><span>${fmtDate(p.date, { day: 'numeric', month: 'short' })}</span></button>`).join('') || '<div class="sm muted">Photos stay on this phone.</div>'}</div></div>
+    <div class="section-head"><h3>Dashboard</h3></div>
+    <div class="grid2">
+      ${tile('stats', 'chart-bar', 'Statistics', 'Weekly chart, muscles, best lifts')}
+      ${tile('exercises', 'barbell', 'Exercises', `${Store.allExercises().length} with directions`)}
+      ${tile('body', 'ruler-measure', 'Measures', 'Body weight, photos')}
+      ${tile('history', 'calendar', 'History', `${ws.length} workout${ws.length === 1 ? '' : 's'}`)}
+      ${climbs ? tile('climbStats', 'hand-grab', 'Climbing', f && f.hang ? `Strongest hang ${f.hang.pct}%` : 'Fingers and plan') : ''}
+      ${tile('badges', 'award', 'Achievements', `${Achievements.unlocked().size} of ${Achievements.LIST.length}`)}
+    </div>
     <div class="card list">
-      <button class="li" data-a="devices">${icon('heart-rate-monitor')}<span>Health Connect</span><span class="muted sm">${HC.on ? 'Linked' : 'Link watch and sleep data'}</span></button>
+      <button class="li" data-a="devices">${icon('heart-rate-monitor')}<span>Health Connect</span><span class="muted sm">${HC.on ? 'Linked' : 'Link watch and sleep'}</span></button>
       <button class="li" data-a="dataSheet">${icon('cloud')}<span>Backup and sync</span><span class="muted sm" id="syncLabel">${Sync.label()}</span></button>
       <button class="li" data-a="settings">${icon('settings')}<span>Settings</span><span class="muted sm">v${esc(Updater.bundleVersion)}</span></button>
-      <button class="li" data-a="allExercises">${icon('list')}<span>Exercise library</span><span class="muted sm">${Store.allExercises().length}</span></button>
     </div>
     <div class="card list">
       <button class="li" data-a="disclaimer">${icon('stethoscope')}<span>Health and safety</span>${icon('chevron-right', 'muted')}</button>
@@ -208,6 +187,55 @@ const UI = {
     </div>
     <div class="card about sm muted">${icon('lock-open')} Every feature is free. No ads, no paywall. Your data stays on your device unless you turn on encrypted sync.</div>
     <div style="height:20px"></div>`;
+  },
+
+  // ---------- Profile pages
+  openStats() {
+    this.openSheet('stats', 'Statistics', () => {
+      const ws = Store.workoutsSorted(), weeks = [];
+      for (let i = 7; i >= 0; i--) {
+        const s = startOfWeek() - i * 7 * 864e5, e = s + 7 * 864e5, inW = ws.filter(w => w.start >= s && w.start < e);
+        weeks.push({ l: fmtDate(s, { day: 'numeric', month: 'numeric' }), v: inW.reduce((a, w) => a + workoutVolume(w), 0), m: Math.round(inW.reduce((a, w) => a + ((w.end || w.start) - w.start) / 60000, 0)) });
+      }
+      const lifts = weeks.some(w => w.v > 0); if (!lifts) weeks.forEach(w => { w.v = w.m; });
+      const prs = topLifts().slice(0, 8);
+      return `<div class="card"><div class="row-between"><b>${lifts ? 'Weekly volume' : 'Weekly training time'}</b><span class="muted sm">${lifts ? U() : 'minutes'}</span></div>${barChart(weeks, { label: lifts ? 'weekly volume' : 'weekly minutes', fmt: fmtNum })}</div>
+      <div class="card"><div class="row-between"><b>${this._mapMode === 'recovery' ? 'Recovery right now' : 'Muscles trained this week'}</b><button class="link sm" data-a="mapMode">${this._mapMode === 'recovery' ? 'Show sets' : 'Show recovery'}</button></div>
+        ${this._mapMode === 'recovery' ? BodyMap.svg(Coach.recovery(), 'recovery') : BodyMap.svg(Coach.weeklySets(), 'sets')}
+        ${BodyMap.legend(this._mapMode === 'recovery' ? 'recovery' : 'sets')}${this._mapMode === 'recovery' ? recoveryList() : ''}</div>
+      ${prs.length ? `<div class="section-head"><h3>Best lifts</h3></div><div class="card list">${prs.map(p => `<button class="li" data-a="exDetail" data-id="${p.exId}"><span>${esc(Store.ex(p.exId).name)}</span><span class="muted sm">${fmtW(p.w)} ${U()} × ${p.r} · e1RM ${Math.round(p.e1)}</span></button>`).join('')}</div>` : ''}
+      ${ws.length ? `<button class="btn wide" data-a="report" data-id="30">${icon('file-type-pdf')} Share a 30-day report (PDF)</button>` : ''}`;
+    });
+  },
+  openHistory() {
+    this.openSheet('history', 'History', () => {
+      const ws = Store.workoutsSorted(), n = this._histAll || 30;
+      return `${ws.slice(0, n).map(w => historyCard(w)).join('') || '<div class="empty">Finished workouts show up here.</div>'}
+        ${ws.length > n ? `<button class="btn wide" data-a="moreHistoryAll">Show more</button>` : ''}`;
+    });
+  },
+  openBody() {
+    this.openSheet('body', 'Measures', () => {
+      const m = Store.data.measurements.slice().sort((a, b) => a.date - b.date), lastM = m[m.length - 1];
+      const bw = m.filter(x => x.weight).map(x => ({ x: x.date, y: +x.weight }));
+      return `<div class="card"><div class="row-between"><b>Body weight</b><button class="btn sm" data-a="addMeasure">${icon('plus')} Log</button></div>
+        ${lastM ? `<div class="big">${fmtW(lastM.weight || '–')} <span class="muted sm">${U()}${lastM.bodyfat ? ' · ' + lastM.bodyfat + '% body fat' : ''}</span></div>` : ''}
+        ${lineChart(bw, { label: 'body weight' })}
+        <button class="link" data-a="measureList">All measurements</button></div>
+      <div class="card"><div class="row-between"><b>Progress photos</b><label class="btn sm">${icon('camera')} Add<input type="file" accept="image/*" data-a-change="addPhoto" hidden></label></div>
+        <div class="photos">${Store.photos.slice().reverse().slice(0, 9).map(p => `<button data-a="viewPhoto" data-id="${p.id}"><img src="${Photos.src(p)}" alt="Progress photo, ${fmtDate(p.date)}"><span>${fmtDate(p.date, { day: 'numeric', month: 'short' })}</span></button>`).join('') || '<div class="sm muted">Photos stay on this phone.</div>'}</div></div>`;
+    });
+  },
+  openExercises() {
+    this.openSheet('exercises', 'Exercises', () => `<button class="btn wide primary" data-a="allExercises">${icon('search')} Search all ${Store.allExercises().length} exercises</button>
+      <div class="grid2">${TRAIN_DISCIPLINES.map(k => { const v = DISCIPLINES[k]; return `
+        <button class="card disc" data-a="discipline" data-id="${k}">${icon(v.icon, 'disc-ic')}<b>${v.name}</b><span class="sm muted">${v.desc}</span></button>`; }).join('')}</div>
+      <p class="sm muted">Tap an exercise for directions, your history and what the coach suggests next.</p>`);
+  },
+  openTimers() {
+    this.openSheet('timers', 'Timers', () => Object.values(TIMER_GROUPS).map(g => `<div class="section-head"><h3>${icon(g.icon)} ${g.name}</h3></div>
+      <div class="timer-tiles">${g.list.map(t => `<button class="card timer-tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<span><b>${TIMER_PRESETS[t].name}</b><span class="sm muted">${esc(TIMER_PRESETS[t].about)}</span></span></button>`).join('')}</div>`).join('')
+      + '<p class="sm muted">Timers keep running with the screen off.</p>');
   },
 
   // ---------- Workout
@@ -399,7 +427,7 @@ const UI = {
       const d = this.draft;
       const folders = [...new Set(Store.data.routines.map(r => r.folder || r.program).filter(Boolean))];
       return `<input class="title-input" data-rf="name" value="${esc(d.name)}" aria-label="Routine name">
-      <label class="field">Folder <span class="muted sm">(optional, groups routines on Home)</span><input data-rf="folder" list="folderList" value="${esc(d.folder || d.program || '')}" placeholder="e.g. Summer cut"><datalist id="folderList">${folders.map(f => `<option value="${esc(f)}">`).join('')}</datalist></label>
+      <label class="field">Folder <span class="muted sm">(optional, groups routines on the Workout tab)</span><input data-rf="folder" list="folderList" value="${esc(d.folder || d.program || '')}" placeholder="e.g. Summer cut"><datalist id="folderList">${folders.map(f => `<option value="${esc(f)}">`).join('')}</datalist></label>
       ${d.exercises.map((e, i) => { const ex = Store.ex(e.exId); const isT = ex.type === 'dur' || ex.type === 'wdur' || ex.type === 'hang'; const none = ex.type === 'dist' || ex.type === 'climb'; return `
         <div class="card"><div class="row-between"><b>${esc(ex.name)}</b><span>
           <button class="icon-btn" data-a="rMove" data-i="${i}" data-v="-1" aria-label="Move up">${icon('arrow-up')}</button>

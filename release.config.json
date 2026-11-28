@@ -2,6 +2,6 @@
   "repo": "JackLongman12/overload",
   "apkVersionCode": 10,
   "apkVersionName": "2.3.0",
-  "notes": "Simpler app. Home is the Today card (with readiness and your training block), your routines and the week. Train has Plans (programs, builder, blocks, climbing plan), four exercise categories, three timers and one Calculators page. Progress keeps the coach, chart, body map, best lifts and history. Backup and sync is one page. Climbing grades are gone: climbing sessions log time, and hangboard and finger strength stay. Removed: camera rep counter, Bluetooth scale and heart-rate strap, Wear OS app, error log.",
+  "notes": "Three tabs like Hevy: Home (Today card, coach, this week, recent workouts), Workout (start, routines, plans, timers, calculators) and Profile (statistics, exercises, measures, history, climbing, achievements, settings). Updates stay inside the app and no longer ask you to download an APK unless a new feature needs one.",
   "bundleMinApk": 5
 }

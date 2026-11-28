@@ -2,11 +2,13 @@
 
 Every feature is free. No account, no ads. Data stays on your phone.
 
-## How the app is laid out (2.3.0)
-- **Home:** the Today card (what to train, readiness, training block), Empty workout and Plans, your routines, this week.
-- **Train:** Plans (ready-made programs, build your own, training blocks, the climbing plan), exercises for Strength, Calisthenics (with skill ladders), Cardio and Climbing, three timers (Intervals, Rounds, Hangboard) and one Calculators page. Plate loading sits on each barbell exercise during a workout.
-- **Progress:** top coach notes (the full list and questions are on the Coach page), stats, climbing strength, weekly chart, body map, best lifts, history, a PDF report and achievements.
-- **You:** body weight, photos, Health Connect, Backup and sync, Settings (app updates at the bottom), exercise library.
+## How the app is laid out (2.4.0)
+Three tabs, like Hevy:
+- **Home:** the Today card (what to train, readiness, training block), top coach notes, this week, and your recent workouts.
+- **Workout:** start an empty workout, new routine, explore plans (programs, builder, training blocks, the climbing plan), your routines, timers and calculators. Plate loading sits on each barbell exercise during a workout.
+- **Profile:** totals, then Statistics, Exercises, Measures, History, Climbing and Achievements, plus Health Connect, Backup and sync and Settings (app updates at the bottom).
+
+Updates stay inside the app. New content installs quietly. A new APK installs silently when Android allows it; otherwise it waits in Settings, and a bar only appears when new content needs the new APK.
 
 ## Install on your Android phone
 1. Download the latest `gym-app-<version>.apk` from https://github.com/JackLongman12/overload/releases on your phone (or copy it from `dist/`).

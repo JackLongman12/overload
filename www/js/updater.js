@@ -113,8 +113,10 @@ const Updater = {
         this._bundleId = b.id; this.state = 'ready'; this.emit();
         return;
       }
-      this.state = needApk ? 'apk' : 'current'; this.emit();
-      if (manual) toast(needApk ? 'A new app version is downloading' : 'You\'re on the latest version');
+      // The current content runs fine on this APK, so a newer APK never interrupts: it installs
+      // silently when you leave the app if Android allows that, otherwise it waits in Settings
+      this.state = 'current'; this.emit();
+      if (manual) toast(needApk ? 'You\'re on the latest version. A newer app build is optional; see Settings.' : 'You\'re on the latest version');
     } catch (e) {
       this.state = 'error'; this.err = e.message || String(e); this.emit();
       if (manual) toast('Update check failed: ' + this.err);

@@ -130,8 +130,8 @@ Object.assign(UI, {
       <div class="card list">
         <div class="li static col"><b>${icon('sparkles')} A coach that adapts</b><span class="sm muted">It suggests when to add reps, sets or weight, and when to back off.</span></div>
         <div class="li static col"><b>${icon('lock')} Private by design</b><span class="sm muted">Your workouts stay on this phone. Nothing is uploaded.</span></div>
-        <div class="li static col"><b>${icon('cloud')} Optional encrypted sync</b><span class="sm muted">Turn it on in You, Backup and sync to back up and use several phones. Only you can read the data.</span></div>
-        <div class="li static col"><b>${icon('file-import')} Bring your history</b><span class="sm muted">Import from Hevy, Strong, FitNotes, Strava or Garmin in You, Backup and sync.</span></div>
+        <div class="li static col"><b>${icon('cloud')} Optional encrypted sync</b><span class="sm muted">Turn it on in Profile, Backup and sync to back up and use several phones. Only you can read the data.</span></div>
+        <div class="li static col"><b>${icon('file-import')} Bring your history</b><span class="sm muted">Import from Hevy, Strong, FitNotes, Strava or Garmin in Profile, Backup and sync.</span></div>
       </div>
       ${DISCLAIMER_HTML}
       <button class="btn primary wide" data-a="onboardDone">I understand, let's train</button>`);
@@ -266,15 +266,15 @@ Object.assign(UI, {
       <div class="chips"><span class="chip">${p.days} day${p.days > 1 ? 's' : ''} a week</span><span class="chip ghost">${esc(p.level)}</span><span class="chip ghost">${esc(p.equip)}</span><span class="chip ghost">${esc(PROGRAM_GOALS[p.goal] || p.goal)}</span></div>
       <p>${esc(p.desc)}</p>
       <div class="card tip-card sm"><b>${icon('info-circle')} How it works</b><ol>
-        <li>Tap <b>Add program</b>. It creates ${p.routines.length} routine${p.routines.length > 1 ? 's' : ''} on your Home tab, in a folder called "${esc(p.name)}".</li>
-        <li>Train ${p.days} day${p.days > 1 ? 's' : ''} a week${days.length > 1 ? `, for example ${days.join(', ')}` : ''}. Home always shows which workout is next. Do them in order and repeat.</li>
+        <li>Tap <b>Add program</b>. It creates ${p.routines.length} routine${p.routines.length > 1 ? 's' : ''} on your Workout tab, in a folder called "${esc(p.name)}".</li>
+        <li>Train ${p.days} day${p.days > 1 ? 's' : ''} a week${days.length > 1 ? `, for example ${days.join(', ')}` : ''}. The Workout tab and the Today card always show which workout is next. Do them in order and repeat.</li>
         <li>"3 sets × 8–12 reps" means: pick a weight you can lift at least 8 times, do 3 sets, and rest in between. When you hit 12 reps on every set, the coach raises the weight.</li>
         <li>Times like "3 × 30–60 s" are holds or rounds in seconds. Climbing sessions are logged as time.</li>
         <li>${esc(goalTip)}</li></ol></div>
       ${p.routines.map(([name, list], k) => `<div class="section-head"><h3>Workout ${k + 1}: ${esc(name)}</h3><span class="muted sm">${days[k % Math.max(1, days.length)] || ''}</span></div>
         <div class="card list">${list.map(([exId, sets, a, b]) => { const ex = Store.ex(exId); return `<button class="li" data-a="exDetail" data-id="${exId}"><span class="grow left"><b>${esc(ex.name)}</b><span class="sm muted">${esc(howTo(ex).steps.split('. ')[0])}.</span></span><span class="tag-next nowrap">${esc(targetText(ex, { sets, repMin: a, repMax: b }))}</span></button>`; }).join('')}</div>`).join('')}
       <div style="height:70px"></div>`,
-      { footer: () => `<div class="sheet-foot">${added ? `<div class="center sm acc">${icon('check')} Added. Find it on Home.</div>` : `<button class="btn primary wide" data-a="addProgram" data-id="${p.id}">${icon('plus')} Add program</button>`}</div>` });
+      { footer: () => `<div class="sheet-foot">${added ? `<div class="center sm acc">${icon('check')} Added. Find it on the Workout tab.</div>` : `<button class="btn primary wide" data-a="addProgram" data-id="${p.id}">${icon('plus')} Add program</button>`}</div>` });
   },
 
   // Library list for one discipline: search, category chips, grouped cards with what each one is
@@ -328,7 +328,7 @@ Object.assign(UI, {
         <div class="stats3"><div class="stat"><div class="muted sm">Strongest hang</div><b>${f && f.hang ? f.hang.pct + '%' : '–'}</b></div><div class="stat"><div class="muted sm">Block lift</div><b>${f && f.lift ? f.lift.pct + '%' : '–'}</b></div><div class="stat"><div class="muted sm">Pull-up 1RM</div><b>${pp ? pp + '%' : '–'}</b></div></div>
         ${trend.length > 1 ? `<div class="card"><b>Strongest hang per session</b><div class="sm muted">Body weight plus added weight, adjusted to a 20 mm edge</div>${lineChart(trend, { label: 'strongest hang', fmt: v => Math.round(v) + '%' })}</div>` : ''}
         <div class="card">${f && f.hang ? `<div class="li static col"><b>Best hang</b><span class="sm muted">${esc(f.hang.name)}: ${f.hang.w ? (f.hang.w > 0 ? '+' : '') + fmtW(f.hang.w) + ' ' + U() : 'body weight'} for ${f.hang.t}s${f.hang.edge ? ' on ' + f.hang.edge + ' mm' : ''}</span></div>`
-          : `<div class="sm">${bw ? 'Log a Max Hang (Added Weight) to see your finger strength.' : 'Log your body weight (You, Body weight), then do a max hang to see your finger strength.'}</div>`}
+          : `<div class="sm">${bw ? 'Log a Max Hang (Added Weight) to see your finger strength.' : 'Log your body weight (Profile, Measures), then do a max hang to see your finger strength.'}</div>`}
           <button class="btn sm wide" data-a="quickStart" data-id="max_hang_added_weight">${icon('hand-grab')} Do the finger test</button></div>
         <div class="card sm">${icon(streak >= 3 ? 'alert-triangle' : 'circle-check')} ${streak ? `${streak} day(s) in a row on your fingers.${streak >= 3 ? ' Take a rest day soon: pulleys recover slower than muscles.' : ''}` : 'Fingers rested.'}</div>
         <div class="section-head"><h3>Hangboard timers</h3></div>
@@ -435,12 +435,6 @@ Object.assign(UI, {
       ${l.steps.map((st, i) => { const ex = Store.ex(st.exId); const state = i < p ? 'done' : i === p ? 'current' : 'locked'; return `<div class="card step ${state}">
         <div class="row-between"><span>${icon(state === 'done' ? 'circle-check' : state === 'current' ? 'player-play' : 'lock')} <b>${esc(ex.name)}</b></span><span class="sm muted">${st.sets} × ${st.goal}${ex.type === 'dur' ? 's' : ''}</span></div>
         ${state === 'current' ? `<button class="btn sm primary" data-a="quickStart" data-id="${st.exId}">Train this step</button>` : ''}</div>`; }).join('')}`; });
-  },
-
-  openTimerGroup(key) {
-    const g = TIMER_GROUPS[key];
-    this.openSheet('tgroup', g.name + ' timers', () => `<p class="sm muted">Pick a timer. You can change the times before you start. Timers keep running with the screen off.</p>
-      <div class="timer-tiles">${g.list.map(t => `<button class="card timer-tile" data-a="timerSetup" data-id="${t}">${icon(TIMER_PRESETS[t].icon)}<span><b>${TIMER_PRESETS[t].name}</b><span class="sm muted">${esc(TIMER_PRESETS[t].about)}</span></span></button>`).join('')}</div>`);
   },
 
   openCalculators() {
@@ -609,7 +603,7 @@ Object.assign(UI, {
       ${Updater.state === 'ready' ? `<button class="btn wide" data-a="applyUpdate">${icon('player-play')} Restart and apply now</button>` : ''}
       ${Updater.apkState === 'permission' ? `<button class="btn primary wide" data-a="allowUpdates">${icon('shield-check')} Allow automatic updates</button>` : ''}
       ${['ready', 'tap'].includes(Updater.apkState) ? `<button class="btn wide" data-a="installUpdate">${icon('download')} Install app update now</button>` : ''}
-      ${Updater.apkState === 'manual' ? `<button class="btn wide" data-a="openApk">${icon('download')} Download new APK</button>` : ''}
+      ${Updater.apkState === 'manual' ? `<button class="btn wide" data-a="openApk">${icon('download')} Download the new app version (opens the browser once)</button><p class="sm muted">This app version can't install updates itself. After you install the new one, updates happen inside the app.</p>` : ''}
       <p class="sm muted">Updates are automatic. New features and fixes switch over quietly when you leave the app. New app versions download in the background and install themselves too: on Android 12 and newer this happens silently after you allow it once. Android always checks that an update is signed by the same developer key.</p>`;
     }
   },
